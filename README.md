@@ -76,12 +76,20 @@ resolving it to a key position when writing:
 | ⌘A | `0x14` (Q) | `0x04` (A) |
 | ⌘⇧4 | `0x21` + Shift (digits need Shift) | `0x21` |
 
-Pick the layout under **Target layout** in the sidebar. It defaults to the app machine's
+Pick the layout from the menu in the header. It shows a short list — the layouts you
+starred, plus the current target — and **Add Layouts…** opens a searchable checklist of
+every installed layout, where a star pins it to the menu. It defaults to the app machine's
 current input source, and is remembered. Choose the layout of the machine the pad will be
 plugged into — that is what the pad will be talking to.
 
 Keys with no character (arrows, Esc, F-keys, media) are stored as fixed positions, since
 they sit in the same place on every layout.
+
+### Moving layers between profiles
+
+**Edit ▸ Copy Layer** (⌥⌘C) and **Edit ▸ Paste Layer** (⌥⌘V) copy a whole layer — every key
+and encoder binding, with its name — from one profile to another. Pasting over a layer that
+already has bindings asks first.
 
 ### Layer switching is physical
 

@@ -26,7 +26,13 @@ struct MacroPadManagerApp: App {
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                 Button("Export Profile…") { Exporter.export(app.profile) }
             }
-            CommandGroup(after: .saveItem) {
+            CommandGroup(after: .pasteboard) {
+                Divider()
+                Button("Copy Layer") { app.copyCurrentLayer() }
+                    .keyboardShortcut("c", modifiers: [.command, .option])
+                Button("Paste Layer") { Dialogs.pasteLayer(app) }
+                    .keyboardShortcut("v", modifiers: [.command, .option])
+                    .disabled(!app.canPasteLayer)
                 Divider()
                 Button("Clear Layer…") { Dialogs.clearLayer(app) }
                 Button("Clear Profile…") { Dialogs.clearProfile(app) }
@@ -88,6 +94,21 @@ enum Dialogs {
                 "This removes every binding on all three layers of this profile. The pad keeps its current keymap until you write to it.",
                 "Clear Profile") {
             app.clearProfile()
+        }
+    }
+
+    @MainActor
+    static func pasteLayer(_ app: AppState) {
+        let name = app.currentLayer.name
+        let count = app.currentLayer.bindings.count
+        guard count > 0 else {
+            app.pasteLayerOverCurrent()
+            return
+        }
+        confirm("Replace “\(name)”?",
+                "Layer \(app.layerIndex + 1) already has \(count) bindings. Pasting replaces them with the copied layer.",
+                "Replace Layer") {
+            app.pasteLayerOverCurrent()
         }
     }
 }

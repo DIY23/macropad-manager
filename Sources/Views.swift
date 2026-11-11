@@ -25,11 +25,24 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Layouts shown directly in the header menu. Everything else is reachable
+    /// through the chooser sheet.
+    @Published var pinnedLayoutIDs: [String] {
+        didSet { UserDefaults.standard.set(pinnedLayoutIDs, forKey: "pinnedLayoutIDs") }
+    }
+
+    /// Layer clipboard, so a layer can be copied from one profile to another.
+    @Published private(set) var copiedLayerName: String?
+    private var layerClipboard: Layer?
+
     init() {
         let saved = UserDefaults.standard.string(forKey: "targetLayoutID")
         let id = saved ?? KeyboardLayouts.currentID()
         targetLayoutID = id
         LayoutContext.targetID = id
+
+        let savedPins = UserDefaults.standard.stringArray(forKey: "pinnedLayoutIDs")
+        pinnedLayoutIDs = savedPins ?? (KeyboardLayouts.enabled().map(\.id) + [id])
 
         if let first = store.profiles.first { profile = first }
         else { profile = StarterProfile.make() }
@@ -104,6 +117,40 @@ final class AppState: ObservableObject {
         profile.layers[layerIndex].name = name
         persistSoon()
     }
+
+    // MARK: pinned layouts
+
+    func isPinned(_ id: String) -> Bool { pinnedLayoutIDs.contains(id) }
+
+    func togglePin(_ id: String) {
+        if let i = pinnedLayoutIDs.firstIndex(of: id) { pinnedLayoutIDs.remove(at: i) }
+        else { pinnedLayoutIDs.append(id) }
+    }
+
+    /// Pinned layouts that still exist, always including the current target.
+    var menuLayouts: [LayoutDescriptor] {
+        let all = LayoutChooserSheet.allLayouts
+        var ids = pinnedLayoutIDs
+        if !ids.contains(targetLayoutID) { ids.append(targetLayoutID) }
+        return ids.compactMap { id in all.first { $0.id == id } }
+    }
+
+    // MARK: layer clipboard
+
+    var canPasteLayer: Bool { layerClipboard != nil }
+
+    func copyCurrentLayer() {
+        layerClipboard = currentLayer
+        copiedLayerName = "\(currentLayer.name) (layer \(layerIndex + 1))"
+    }
+
+    /// Replaces the current layer with the clipboard contents. The copied layer
+    /// keeps its own name — that is the point of copying it between profiles.
+    func pasteLayerOverCurrent() {
+        guard let clip = layerClipboard, layerIndex < profile.layers.count else { return }
+        profile.layers[layerIndex] = clip
+        store.save(profile)
+    }
 }
 
 // MARK: - Root
@@ -134,6 +181,12 @@ struct ContentView: View {
 
 struct HeaderBar: View {
     @EnvironmentObject var app: AppState
+    @State private var showLayoutChooser = false
+
+    private var layoutTitle: String {
+        let name = KeyboardLayouts.name(for: app.targetLayoutID)
+        return app.targetLayoutID == KeyboardLayouts.currentID() ? "\(name) (this Mac)" : name
+    }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -158,15 +211,31 @@ struct HeaderBar: View {
                     .font(.system(size: 11)).foregroundStyle(SidebarView.green)
             }
 
-            Picker("", selection: $app.targetLayoutID) {
-                ForEach(SidebarView.layoutOptions) { d in
-                    Text(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name).tag(d.id)
+            Menu {
+                ForEach(app.menuLayouts) { d in
+                    Button {
+                        app.targetLayoutID = d.id
+                    } label: {
+                        if d.id == app.targetLayoutID {
+                            Label(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name,
+                                  systemImage: "checkmark")
+                        } else {
+                            Text(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name)
+                        }
+                    }
                 }
+                Divider()
+                Button("Add Layouts…") { showLayoutChooser = true }
+            } label: {
+                Label(layoutTitle, systemImage: "keyboard")
+                    .font(.system(size: 11))
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 170)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
             .help("Keyboard layout of the Mac the pad will be used on")
+            .sheet(isPresented: $showLayoutChooser) {
+                LayoutChooserSheet().environmentObject(app)
+            }
 
             ConnectionPill()
             WriteButton()
@@ -421,10 +490,10 @@ struct PadPlateView: View {
             if !action.isEmpty {
                 if action.kind == .keystroke {
                     Text(action.display.uppercased())
-                        .font(.system(size: side * 0.27, weight: .semibold, design: .rounded))
+                        .font(.system(size: side * 0.225, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.93))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.36)
+                        .minimumScaleFactor(0.38)
                         .padding(.horizontal, side * 0.05)
                 } else {
                     Image(systemName: action.kind == .media ? "speaker.wave.2.fill" : "computermouse.fill")
