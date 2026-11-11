@@ -12,7 +12,9 @@ func hex(_ bytes: ArraySlice<UInt8>) -> String {
 }
 
 do {
-    let msgs = try driver.encode(profile: profile)
+    let resolver = LayoutContext.resolver
+    print("target layout: \(resolver.id)  usable=\(resolver.isUsable)")
+    let msgs = try driver.encode(profile: profile, resolver: resolver)
     print("messages: \(msgs.count)  passes: \(driver.passes)  gap: \(driver.interMessageDelay)s")
     for m in msgs.prefix(6) {
         print("  \(m.label.padding(toLength: 26, withPad: " ", startingAt: 0)) \(hex(m.bytes.prefix(14)))")

@@ -21,6 +21,9 @@ running.
 - **Record shortcuts by pressing them**, the way macOS does.
 - **Profiles**: save, duplicate, delete, export and import as JSON.
 - **Writes all three layers in one go** with a progress indicator.
+- **Target keyboard layout**: shortcuts are stored as *characters*, not key
+  positions, and translated for the layout of the Mac the pad will be used on —
+  so the same profile works on a QWERTY and an AZERTY machine.
 
 ## Requirements
 
@@ -54,6 +57,28 @@ running.
 
 Key labels are drawn using **your active keyboard layout**, not QWERTY positions, so a
 key that sends ⌘Z reads ⌘Z even on AZERTY.
+
+### Keyboard layouts
+
+A HID device can only say "the key at this position went down". Which character that
+produces depends on the *target* Mac's layout. So a profile built on a Belgian AZERTY
+machine would quietly send ⌘W instead of ⌘Z on a QWERTY one.
+
+MacroPad Manager avoids that by storing the **character** a shortcut should produce and
+resolving it to a key position when writing:
+
+| Shortcut | Belgian AZERTY | U.S. QWERTY |
+|---|---|---|
+| ⌘Z | `0x1a` (the key labelled W) | `0x1d` (the key labelled Z) |
+| ⌘A | `0x14` (Q) | `0x04` (A) |
+| ⌘⇧4 | `0x21` + Shift (digits need Shift) | `0x21` |
+
+Pick the layout under **Target layout** in the sidebar. It defaults to the app machine's
+current input source, and is remembered. Choose the layout of the machine the pad will be
+plugged into — that is what the pad will be talking to.
+
+Keys with no character (arrows, Esc, F-keys, media) are stored as fixed positions, since
+they sit in the same place on every layout.
 
 ### Layer switching is physical
 

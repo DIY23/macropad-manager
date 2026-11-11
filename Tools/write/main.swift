@@ -18,7 +18,7 @@ let profile = StarterProfile.make()
 let driver = CH57xK8850Driver()
 
 do {
-    let msgs = try driver.encode(profile: profile)
+    let msgs = try driver.encode(profile: profile, resolver: LayoutContext.resolver)
     var sent = 0
     for pass in 0..<driver.passes {
         for m in msgs {

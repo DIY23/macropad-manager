@@ -102,98 +102,103 @@ final class ProfileStore: ObservableObject {
 
 // MARK: - Starter profile
 //
-// Defaults are defined by CHARACTER and converted through the French AZERTY
-// table, because that is the owner's layout. Recording a shortcut in the app
-// does not use this table at all — it captures the physical keycode, which is
-// layout independent and therefore always correct.
+// Defaults are written as CHARACTERS, not key positions, so the same profile
+// works on a QWERTY Mac and on this Belgian AZERTY one: the resolver maps each
+// character to whatever physical key produces it on the target layout.
 
 enum StarterProfile {
     static func make() -> PadProfile {
         var p = PadProfile.empty(model: .k8850)
         p.name = "Studio Default"
-
         for i in 0..<3 { p.layers[i].name = ["Editing", "Browser", "System"][i] }
 
-        // Layer 1
-        let l1: [(Int, String, [Modifier])] = [
-            (0, "c", [.cmd]), (1, "v", [.cmd]), (2, "x", [.cmd]), (3, "z", [.cmd]),
-            (4, "z", [.cmd, .shift]), (5, "a", [.cmd]), (6, "f", [.cmd]), (7, "s", [.cmd]),
-        ]
-        for (idx, ch, mods) in l1 {
-            if let u = AZERTY.usage(for: ch) {
-                p.layers[0].set(.button(idx), Action(kind: .keystroke, modifiers: Set(mods), usages: [u]))
-            }
+        func ks(_ layer: Int, _ c: ControlID, _ mods: Set<Modifier>, _ tokens: [KeyToken]) {
+            p.layers[layer].set(c, Action(kind: .keystroke, modifiers: mods, tokens: tokens))
         }
-        p.layers[0].set(.button(8), Action(kind: .keystroke, usages: [0x29]))   // esc
-        p.layers[0].set(.button(9), Action(kind: .keystroke, usages: [0x28]))   // return
-        p.layers[0].set(.button(10), Action(kind: .keystroke, usages: [0x2A]))  // delete
-        p.layers[0].set(.button(11), Action(kind: .keystroke, modifiers: [.cmd], usages: [0x50])) // cmd-left
-        p.layers[0].set(.button(12), Action(kind: .keystroke, modifiers: [.cmd], usages: [0x4F])) // cmd-right
-        p.layers[0].set(.button(13), Action(kind: .keystroke, modifiers: [.cmd], usages: [0x2B])) // cmd-tab
-        p.layers[0].set(.button(14), Action(kind: .keystroke, modifiers: [.cmd, .shift], usages: [0x2B]))
-        p.layers[0].set(.button(15), Action(kind: .keystroke, modifiers: [.cmd, .shift], usages: [0x21])) // cmd-shift-4
-
-        for k in 0..<3 { p.layers[0].set(.knob(k, .ccw), media(.volumeDown))
-                         p.layers[0].set(.knob(k, .cw),  media(.volumeUp)) }
-        p.layers[0].set(.knob(0, .press), media(.mute))
-        p.layers[0].set(.knob(1, .ccw), media(.previousTrack))
-        p.layers[0].set(.knob(1, .press), media(.playPause))
-        p.layers[0].set(.knob(1, .cw), media(.nextTrack))
-        p.layers[0].set(.knob(2, .ccw), Action(kind: .keystroke, modifiers: [.ctrl, .shift], usages: [0x2B]))
-        p.layers[0].set(.knob(2, .press), Action(kind: .keystroke, usages: [0x29]))
-        p.layers[0].set(.knob(2, .cw), Action(kind: .keystroke, modifiers: [.ctrl], usages: [0x2B]))
-
-        // Layer 2 — browser
-        let l2: [(Int, String, [Modifier])] = [
-            (0, "t", [.cmd]), (1, "w", [.cmd]), (2, "t", [.cmd, .shift]), (3, "r", [.cmd]),
-            (4, "r", [.cmd, .shift]), (5, "l", [.cmd]), (10, "d", [.cmd]), (11, "f", [.cmd]),
-        ]
-        for (idx, ch, mods) in l2 {
-            if let u = AZERTY.usage(for: ch) {
-                p.layers[1].set(.button(idx), Action(kind: .keystroke, modifiers: Set(mods), usages: [u]))
-            }
+        func md(_ layer: Int, _ c: ControlID, _ m: MediaKey) {
+            p.layers[layer].set(c, Action(kind: .media, mediaKey: m.rawValue))
         }
-        p.layers[1].set(.button(6), Action(kind: .keystroke, modifiers: [.ctrl], usages: [0x2B]))
-        p.layers[1].set(.button(7), Action(kind: .keystroke, modifiers: [.ctrl, .shift], usages: [0x2B]))
-        p.layers[1].set(.button(13), Action(kind: .keystroke, usages: [0x29]))
-        p.layers[1].set(.button(14), Action(kind: .keystroke, usages: [0x28]))
-        p.layers[1].set(.button(15), Action(kind: .keystroke, modifiers: [.cmd, .shift], usages: [0x21]))
 
-        // Layer 3 — system
-        p.layers[2].set(.button(0), Action(kind: .keystroke, modifiers: [.ctrl], usages: [0x52]))
-        p.layers[2].set(.button(1), Action(kind: .keystroke, modifiers: [.ctrl], usages: [0x51]))
-        p.layers[2].set(.button(2), Action(kind: .keystroke, modifiers: [.cmd], usages: [0x2C]))
-        p.layers[2].set(.button(3), Action(kind: .keystroke, modifiers: [.ctrl, .cmd],
-                                           usages: [AZERTY.usage(for: "q") ?? 0x04]))
-        p.layers[2].set(.button(4), Action(kind: .keystroke, modifiers: [.cmd, .shift], usages: [0x20]))
-        p.layers[2].set(.button(5), Action(kind: .keystroke, modifiers: [.cmd, .shift], usages: [0x21]))
-        p.layers[2].set(.button(6), Action(kind: .keystroke, modifiers: [.ctrl, .cmd], usages: [0x09]))
-        p.layers[2].set(.button(7), Action(kind: .keystroke, modifiers: [.cmd], usages: [AZERTY.usage(for: "h") ?? 0x0B]))
-        p.layers[2].set(.button(8), Action(kind: .keystroke, modifiers: [.cmd], usages: [AZERTY.usage(for: "m") ?? 0x10]))
-        p.layers[2].set(.button(9), Action(kind: .keystroke, modifiers: [.cmd], usages: [0x2B]))
-        p.layers[2].set(.button(10), Action(kind: .keystroke, modifiers: [.cmd, .shift], usages: [0x2B]))
-        p.layers[2].set(.button(11), media(.brightnessDown))
-        p.layers[2].set(.button(12), media(.brightnessUp))
-        p.layers[2].set(.button(13), media(.mute))
-        p.layers[2].set(.button(14), Action(kind: .keystroke, usages: [0x29]))
-        p.layers[2].set(.button(15), Action(kind: .keystroke, usages: [0x28]))
+        // Layer 1 - editing and navigation
+        ks(0, .button(0), [.cmd], [.char("c")])
+        ks(0, .button(1), [.cmd], [.char("v")])
+        ks(0, .button(2), [.cmd], [.char("x")])
+        ks(0, .button(3), [.cmd], [.char("z")])
+        ks(0, .button(4), [.cmd, .shift], [.char("z")])
+        ks(0, .button(5), [.cmd], [.char("a")])
+        ks(0, .button(6), [.cmd], [.char("f")])
+        ks(0, .button(7), [.cmd], [.char("s")])
+        ks(0, .button(8), [], [.key(0x29)])
+        ks(0, .button(9), [], [.key(0x28)])
+        ks(0, .button(10), [], [.key(0x2A)])
+        ks(0, .button(11), [.cmd], [.key(0x50)])
+        ks(0, .button(12), [.cmd], [.key(0x4F)])
+        ks(0, .button(13), [.cmd], [.key(0x2B)])
+        ks(0, .button(14), [.cmd, .shift], [.key(0x2B)])
+        ks(0, .button(15), [.cmd, .shift], [.char("4")])
+
+        md(0, .knob(0, .ccw), .volumeDown)
+        md(0, .knob(0, .press), .mute)
+        md(0, .knob(0, .cw), .volumeUp)
+        md(0, .knob(1, .ccw), .previousTrack)
+        md(0, .knob(1, .press), .playPause)
+        md(0, .knob(1, .cw), .nextTrack)
+        ks(0, .knob(2, .ccw), [.ctrl, .shift], [.key(0x2B)])
+        ks(0, .knob(2, .press), [], [.key(0x29)])
+        ks(0, .knob(2, .cw), [.ctrl], [.key(0x2B)])
+
+        // Layer 2 - browser
+        ks(1, .button(0), [.cmd], [.char("t")])
+        ks(1, .button(1), [.cmd], [.char("w")])
+        ks(1, .button(2), [.cmd, .shift], [.char("t")])
+        ks(1, .button(3), [.cmd], [.char("r")])
+        ks(1, .button(4), [.cmd, .shift], [.char("r")])
+        ks(1, .button(5), [.cmd], [.char("l")])
+        ks(1, .button(6), [.ctrl], [.key(0x2B)])
+        ks(1, .button(7), [.ctrl, .shift], [.key(0x2B)])
+        ks(1, .button(8), [.cmd], [.char("d")])
+        ks(1, .button(9), [.cmd], [.char("f")])
+        ks(1, .button(13), [], [.key(0x29)])
+        ks(1, .button(14), [], [.key(0x28)])
+        ks(1, .button(15), [.cmd, .shift], [.char("4")])
+        ks(1, .knob(0, .ccw), [.ctrl, .shift], [.key(0x2B)])
+        ks(1, .knob(0, .press), [], [.key(0x29)])
+        ks(1, .knob(0, .cw), [.ctrl], [.key(0x2B)])
+        md(1, .knob(1, .ccw), .volumeDown)
+        md(1, .knob(1, .press), .mute)
+        md(1, .knob(1, .cw), .volumeUp)
+        ks(1, .knob(2, .ccw), [], [.key(0x4B)])
+        ks(1, .knob(2, .press), [], [.key(0x29)])
+        ks(1, .knob(2, .cw), [], [.key(0x4E)])
+
+        // Layer 3 - window and system
+        ks(2, .button(0), [.ctrl], [.key(0x52)])
+        ks(2, .button(1), [.ctrl], [.key(0x51)])
+        ks(2, .button(2), [.cmd], [.key(0x2C)])
+        ks(2, .button(3), [.ctrl, .cmd], [.char("q")])
+        ks(2, .button(4), [.cmd, .shift], [.char("3")])
+        ks(2, .button(5), [.cmd, .shift], [.char("4")])
+        ks(2, .button(6), [.ctrl, .cmd], [.char("f")])
+        ks(2, .button(7), [.cmd], [.char("h")])
+        ks(2, .button(8), [.cmd], [.char("m")])
+        ks(2, .button(9), [.cmd], [.key(0x2B)])
+        ks(2, .button(10), [.cmd, .shift], [.key(0x2B)])
+        md(2, .button(11), .brightnessDown)
+        md(2, .button(12), .brightnessUp)
+        md(2, .button(13), .mute)
+        ks(2, .button(14), [], [.key(0x29)])
+        ks(2, .button(15), [], [.key(0x28)])
+
+        md(2, .knob(0, .ccw), .volumeDown)
+        md(2, .knob(0, .press), .mute)
+        md(2, .knob(0, .cw), .volumeUp)
+        md(2, .knob(1, .ccw), .previousTrack)
+        md(2, .knob(1, .press), .playPause)
+        md(2, .knob(1, .cw), .nextTrack)
+        ks(2, .knob(2, .ccw), [.ctrl], [.key(0x2B)])
+        ks(2, .knob(2, .press), [], [.key(0x29)])
+        ks(2, .knob(2, .cw), [.ctrl, .shift], [.key(0x2B)])
 
         return p
     }
-
-    static func media(_ m: MediaKey) -> Action {
-        Action(kind: .media, mediaKey: m.rawValue)
-    }
-}
-
-/// French AZERTY: character -> HID usage. Used only for authoring defaults and
-/// for the "type a character" helper, never for shortcut recording.
-enum AZERTY {
-    static let table: [String: UInt8] = [
-        "a":0x14, "z":0x1A, "e":0x08, "r":0x15, "t":0x17, "y":0x1C, "u":0x18,
-        "i":0x0C, "o":0x12, "p":0x13, "q":0x04, "s":0x16, "d":0x07, "f":0x09,
-        "g":0x0A, "h":0x0B, "j":0x0D, "k":0x0E, "l":0x0F, "m":0x33,
-        "w":0x1D, "x":0x1B, "c":0x06, "v":0x19, "b":0x05, "n":0x11,
-    ]
-    static func usage(for ch: String) -> UInt8? { table[ch.lowercased()] }
 }

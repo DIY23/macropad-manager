@@ -88,7 +88,7 @@ struct InspectorView: View {
         VStack(alignment: .leading, spacing: 8) {
             label("SHORTCUT")
             HStack(spacing: 5) {
-                if action.usages.isEmpty {
+                if action.tokens.isEmpty {
                     Text("Nothing recorded").font(.system(size: 11)).foregroundStyle(.secondary)
                 } else {
                     ForEach(modifierOrder.filter { action.modifiers.contains($0) }, id: \.self) { m in
@@ -98,8 +98,8 @@ struct InspectorView: View {
                             .background(Color.primary.opacity(0.09),
                                         in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
-                    ForEach(Array(action.usages.enumerated()), id: \.offset) { _, u in
-                        Text(LayoutLabel.label(for: u))
+                    ForEach(Array(action.tokens.enumerated()), id: \.offset) { _, t in
+                        Text(t.display.uppercased())
                             .font(.system(size: 11, weight: .medium))
                             .padding(.horizontal, 6).padding(.vertical, 3)
                             .background(Color.primary.opacity(0.09),
@@ -118,11 +118,11 @@ struct InspectorView: View {
             }
             .buttonStyle(.bordered).controlSize(.small)
 
-            if !action.modifiers.isEmpty || !action.usages.isEmpty {
+            if !action.modifiers.isEmpty || !action.tokens.isEmpty {
                 Text("Sends \(action.display)")
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             }
-            Text("Modifiers apply to the first key of a sequence.")
+            Text("Recorded as characters, resolved to keys for the target layout.")
                 .font(.system(size: 10)).foregroundStyle(.tertiary)
         }
     }
@@ -200,9 +200,12 @@ struct InspectorView: View {
 struct RecorderSheet: View {
     let onCapture: (Action) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var usages: [UInt8] = []
+    @State private var tokens: [KeyToken] = []
     @State private var mods: Set<Modifier> = []
     @State private var monitor: Any?
+
+    // What the keys produce on *this* Mac, which is the intent we store.
+    private let pressResolver = LayoutContext.resolver(for: KeyboardLayouts.currentID())
 
     var body: some View {
         VStack(spacing: 16) {
@@ -215,17 +218,17 @@ struct RecorderSheet: View {
                 ForEach(modifierOrder.filter { mods.contains($0) }, id: \.self) { m in
                     Text(m.glyph).font(.system(size: 18, weight: .medium))
                 }
-                ForEach(Array(usages.enumerated()), id: \.offset) { _, u in
-                    Text(KeyNames.label(for: u)).font(.system(size: 15, weight: .medium))
+                ForEach(Array(tokens.enumerated()), id: \.offset) { _, t in
+                    Text(t.display.uppercased()).font(.system(size: 15, weight: .medium))
                 }
-                if mods.isEmpty && usages.isEmpty {
+                if mods.isEmpty && tokens.isEmpty {
                     Text("⌨︎").font(.system(size: 26)).foregroundStyle(.tertiary)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 64)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            Text("\(usages.count) / 18 keys")
+            Text("\(tokens.count) / 18 keys")
                 .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
 
             HStack {
@@ -233,20 +236,20 @@ struct RecorderSheet: View {
                 Spacer()
                 Button("Use this") {
                     var a = Action(kind: .keystroke)
-                    a.usages = usages
+                    a.tokens = tokens
                     a.modifiers = mods
                     onCapture(a)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(usages.isEmpty)
+                .disabled(tokens.isEmpty)
             }
         }
         .padding(20)
         .frame(width: 380)
         .onAppear {
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                if event.keyCode == 53 && usages.isEmpty { dismiss(); return nil }   // esc
+                if event.keyCode == 53 && tokens.isEmpty { dismiss(); return nil }   // esc
                 let f = event.modifierFlags
                 var m: Set<Modifier> = []
                 if f.contains(.control) { m.insert(.ctrl) }
@@ -254,8 +257,14 @@ struct RecorderSheet: View {
                 if f.contains(.option)  { m.insert(.alt) }
                 if f.contains(.command) { m.insert(.cmd) }
                 if !m.isEmpty { mods = m }
-                if let usage = VirtualKeyMap.table[event.keyCode] {
-                    if usages.count < 18 { usages.append(usage) }
+                if let usage = VirtualKeyMap.table[event.keyCode], tokens.count < 18 {
+                    // Store what this key actually types here; a character is
+                    // portable to other layouts, a bare usage only if it has none.
+                    if let ch = pressResolver.character(for: usage) {
+                        tokens.append(.char(ch.lowercased()))
+                    } else {
+                        tokens.append(.key(usage))
+                    }
                 }
                 return nil
             }

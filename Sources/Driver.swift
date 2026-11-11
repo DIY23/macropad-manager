@@ -147,6 +147,7 @@ enum DriverError: LocalizedError {
     case writeFailed(IOReturn)
     case unsupportedModel(String)
     case nothingToWrite
+    case unsupportedCharacter(String, String)
 
     var errorDescription: String? {
         switch self {
@@ -155,6 +156,8 @@ enum DriverError: LocalizedError {
         case .writeFailed(let r): return String(format: "The device rejected a report (0x%08X).", r)
         case .unsupportedModel(let m): return "No driver for \(m) yet."
         case .nothingToWrite: return "There is nothing to write."
+        case .unsupportedCharacter(let c, let layout):
+            return "“\(c)” cannot be typed on the \(layout) layout, so this shortcut cannot be written."
         }
     }
 }
@@ -165,7 +168,9 @@ protocol DeviceDriver {
     var id: String { get }
     var model: DeviceModel { get }
     /// Encodes a profile into the exact report payloads for this firmware.
-    func encode(profile: PadProfile) throws -> [DriverMessage]
+    /// `resolver` translates the profile's intended characters into key
+    /// positions for the target keyboard layout.
+    func encode(profile: PadProfile, resolver: LayoutResolver) throws -> [DriverMessage]
     /// Timing the firmware needs between reports.
     var interMessageDelay: TimeInterval { get }
     var passes: Int { get }
@@ -186,7 +191,7 @@ struct CH57xK8850Driver: DeviceDriver {
 
     static let commit: [UInt8] = [0x03, 0xFD, 0xFE, 0xFF]
 
-    func encode(profile: PadProfile) throws -> [DriverMessage] {
+    func encode(profile: PadProfile, resolver: LayoutResolver) throws -> [DriverMessage] {
         var out: [DriverMessage] = []
         for (layerIndex, layer) in profile.layers.enumerated() where layerIndex < 3 {
             for b in 0..<model.buttonCount {
@@ -194,7 +199,7 @@ struct CH57xK8850Driver: DeviceDriver {
                 let a = layer.action(c)
                 guard !a.isEmpty else { continue }
                 out.append(.init(label: "L\(layerIndex + 1) key \(b + 1)",
-                                 bytes: Self.pad(try bind(layer: layerIndex, keyID: UInt8(b + 1), action: a))))
+                                 bytes: Self.pad(try bind(layer: layerIndex, keyID: UInt8(b + 1), action: a, resolver: resolver))))
                 out.append(.init(label: "L\(layerIndex + 1) key \(b + 1) commit", bytes: Self.pad(Self.commit)))
             }
             for k in 0..<model.knobCount {
@@ -204,7 +209,7 @@ struct CH57xK8850Driver: DeviceDriver {
                     guard !a.isEmpty else { continue }
                     let keyID = UInt8(17 + 3 * k + Int(part.index))
                     out.append(.init(label: "L\(layerIndex + 1) knob \(k + 1) \(part.rawValue)",
-                                     bytes: Self.pad(try bind(layer: layerIndex, keyID: keyID, action: a))))
+                                     bytes: Self.pad(try bind(layer: layerIndex, keyID: keyID, action: a, resolver: resolver))))
                     out.append(.init(label: "L\(layerIndex + 1) knob \(k + 1) \(part.rawValue) commit",
                                      bytes: Self.pad(Self.commit)))
                 }
@@ -215,7 +220,7 @@ struct CH57xK8850Driver: DeviceDriver {
     }
 
     /// bind: 03 FD <keyID> <layer+1> <kind> 00 <count> [00 00 <code>]*
-    private func bind(layer: Int, keyID: UInt8, action: Action) throws -> [UInt8] {
+    private func bind(layer: Int, keyID: UInt8, action: Action, resolver: LayoutResolver) throws -> [UInt8] {
         var msg: [UInt8] = [0x03, 0xFD, keyID, UInt8(layer + 1)]
 
         switch action.kind {
@@ -223,13 +228,36 @@ struct CH57xK8850Driver: DeviceDriver {
             throw DriverError.nothingToWrite
 
         case .keystroke:
+            let wantsShift = action.modifiers.contains(.shift) || action.modifiers.contains(.rshift)
             var seq: [[UInt8]] = []
-            for u in action.usages {
-                for m in modifierOrder where action.modifiers.contains(m) {
+
+            for token in action.tokens {
+                var mods = action.modifiers
+                var usage: UInt8
+
+                switch token.kind {
+                case .usage:
+                    usage = token.usageValue ?? 0
+                case .character:
+                    let base = token.value
+                    let wanted = wantsShift ? base.uppercased() : base
+                    guard let entry = resolver.resolve(character: wanted) else {
+                        throw DriverError.unsupportedCharacter(base, KeyboardLayouts.name(for: resolver.id))
+                    }
+                    usage = entry.usage
+                    // The character may need Shift or Option on this layout even
+                    // though the shortcut itself did not ask for them (on AZERTY
+                    // the digit "4" is Shift + the "'" key).
+                    if entry.needsShift { mods.insert(.shift) }
+                    if entry.needsOption { mods.insert(.alt) }
+                }
+
+                for m in modifierOrder where mods.contains(m) {
                     seq.append([0, 0, m.code])
                 }
-                seq.append([0, 0, u])
+                seq.append([0, 0, usage])
             }
+
             guard seq.count <= 18 else { throw DriverError.unsupportedModel("Macro longer than 18 keys") }
             msg += [0x01, 0x00, UInt8(seq.count)]
             for s in seq { msg += s }
@@ -297,7 +325,7 @@ final class PadWriter: ObservableObject {
             return
         }
         do {
-            let messages = try driver.encode(profile: profile)
+            let messages = try driver.encode(profile: profile, resolver: LayoutContext.resolver)
             let total = messages.count * driver.passes
             phase = .writing(done: 0, total: total)
 

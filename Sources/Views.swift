@@ -18,7 +18,22 @@ final class AppState: ObservableObject {
     @Published var layerIndex: Int = 0
     @Published var selection: ControlID? = .button(0)
 
+    /// The keyboard layout of the Mac the pad will be *used* on. Shortcuts are
+    /// stored as characters and translated into key positions through this
+    /// layout, so one profile works on a QWERTY and an AZERTY machine alike.
+    @Published var targetLayoutID: String {
+        didSet {
+            LayoutContext.targetID = targetLayoutID
+            UserDefaults.standard.set(targetLayoutID, forKey: "targetLayoutID")
+        }
+    }
+
     init() {
+        let saved = UserDefaults.standard.string(forKey: "targetLayoutID")
+        let id = saved ?? KeyboardLayouts.currentID()
+        targetLayoutID = id
+        LayoutContext.targetID = id
+
         if let first = store.profiles.first { profile = first }
         else { profile = StarterProfile.make() }
 
@@ -98,6 +113,15 @@ struct ContentView: View {
 struct SidebarView: View {
     @EnvironmentObject var app: AppState
 
+    /// Enabled layouts first (what people actually use), then everything else.
+    static let layoutOptions: [LayoutDescriptor] = {
+        var seen = Set<String>()
+        var out: [LayoutDescriptor] = []
+        for d in KeyboardLayouts.enabled() where seen.insert(d.id).inserted { out.append(d) }
+        for d in KeyboardLayouts.all() where seen.insert(d.id).inserted { out.append(d) }
+        return out
+    }()
+
     var body: some View {
         List {
             Section("DEVICE") {
@@ -122,6 +146,21 @@ struct SidebarView: View {
                     }
                     .padding(.vertical, 2)
                 }
+            }
+
+            Section("TARGET LAYOUT") {
+                Picker("", selection: $app.targetLayoutID) {
+                    ForEach(Self.layoutOptions) { d in
+                        Text(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name)
+                            .tag(d.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                Text("Shortcuts are translated into key positions for this layout.")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("LAYERS") {

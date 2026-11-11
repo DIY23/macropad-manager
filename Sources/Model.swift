@@ -70,7 +70,10 @@ struct Action: Codable, Hashable {
 
     var kind: Kind = .none
     var modifiers: Set<Modifier> = []
-    var usages: [UInt8] = []            // HID keyboard usages, sequence order
+    /// What the key should *produce*, not where it sits. A character is resolved
+    /// to a key position against the target layout at write time, which is what
+    /// makes a profile portable between QWERTY and AZERTY machines.
+    var tokens: [KeyToken] = []
     var mediaKey: String = ""           // MediaKey.rawValue
     var mouseButton: String = "left"    // left | right | middle
     var clickCount: Int = 1
@@ -90,9 +93,16 @@ struct Action: Codable, Hashable {
             if wheel != 0 { return "Wheel \(wheel > 0 ? "up" : "down")" }
             return "\(mouseButton.capitalized) click"
         case .keystroke:
-            if usages.isEmpty { return "—" }
+            if tokens.isEmpty { return "—" }
             let mods = modifierOrder.filter { modifiers.contains($0) }.map(\.glyph).joined()
-            let keys = usages.map { LayoutLabel.label(for: $0, modifiers: modifiers) }.joined(separator: " ")
+            let shift = modifiers.contains(.shift) || modifiers.contains(.rshift)
+            let resolver = LayoutContext.resolver
+            let keys = tokens.map { t -> String in
+                switch t.kind {
+                case .character: return shift ? t.value.uppercased() : t.value
+                case .usage:     return resolver.label(for: t.usageValue ?? 0, shift: shift)
+                }
+            }.joined(separator: " ")
             return mods + keys
         }
     }
@@ -304,52 +314,28 @@ enum KeyNames {
     static func label(for usage: UInt8) -> String { table[usage] ?? "0x" + String(format: "%02X", usage) }
 }
 
-/// HID usages are physical QWERTY positions. Labelling them with the raw HID
-/// name is wrong for anyone not on QWERTY — on French AZERTY the key that sends
-/// Cmd+Z would read "⌘W". This resolves each usage to the character the *user's*
-/// active input source actually produces.
-enum LayoutLabel {
-    private static let reverse: [UInt8: UInt16] = {
-        var r: [UInt8: UInt16] = [:]
-        for (vk, usage) in VirtualKeyMap.table where r[usage] == nil { r[usage] = vk }
-        return r
-    }()
+/// A single keypress the pad should produce.
+///
+/// `.character` is the portable form: it names what the key should type, and is
+/// resolved to a physical position against the target layout when writing.
+/// `.usage` is for keys that have no character (arrows, F-keys, Esc, ⌫), which
+/// sit at the same position on every layout.
+struct KeyToken: Codable, Hashable {
+    enum Kind: String, Codable { case character, usage }
 
-    static func label(for usage: UInt8, modifiers: Set<Modifier> = []) -> String {
-        character(for: usage, modifiers: modifiers) ?? KeyNames.label(for: usage)
-    }
+    var kind: Kind
+    var value: String
 
-    static func character(for usage: UInt8, modifiers: Set<Modifier> = []) -> String? {
-        guard let vk = reverse[usage] else { return nil }
-        guard let src = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
-              let raw = TISGetInputSourceProperty(src, kTISPropertyUnicodeKeyLayoutData)
-        else { return nil }
-        let data = Unmanaged<CFData>.fromOpaque(raw).takeUnretainedValue() as Data
+    static func char(_ s: String) -> KeyToken { KeyToken(kind: .character, value: s) }
+    static func key(_ u: UInt8) -> KeyToken { KeyToken(kind: .usage, value: String(u)) }
 
-        // Shift and Option change which character a key produces (on AZERTY the
-        // QWERTY "4" key is "'" until you hold Shift), so they must be part of
-        // the translation, otherwise the label lies about the shortcut.
-        // UCKeyTranslate uses the low-byte device bits: shift 0x02, option 0x08
-        // — NOT Carbon's shiftKey/optionKey constants, which silently do nothing.
-        var state: UInt32 = 0
-        if modifiers.contains(where: { $0 == .shift || $0 == .rshift }) { state |= 0x02 }
-        if modifiers.contains(where: { $0 == .alt || $0 == .ralt }) { state |= 0x08 }
+    var usageValue: UInt8? { kind == .usage ? UInt8(value) : nil }
+    var characterValue: String? { kind == .character ? value : nil }
 
-        return data.withUnsafeBytes { buffer -> String? in
-            guard let layout = buffer.bindMemory(to: UCKeyboardLayout.self).baseAddress else { return nil }
-            var dead: UInt32 = 0
-            var chars = [UniChar](repeating: 0, count: 4)
-            var length = 0
-            let err = UCKeyTranslate(layout, vk, UInt16(kUCKeyActionDisplay), state, 0,
-                                     OptionBits(kUCKeyTranslateNoDeadKeysBit),
-                                     &dead, chars.count, &length, &chars)
-            guard err == noErr, length > 0 else { return nil }
-            let s = String(utf16CodeUnits: chars, count: length)
-            guard let f = s.first,
-                  !f.isNewline,
-                  !(f.unicodeScalars.first.map { CharacterSet.controlCharacters.contains($0) } ?? true)
-            else { return nil }
-            return s.uppercased()
+    var display: String {
+        switch kind {
+        case .character: return value
+        case .usage:     return KeyNames.label(for: usageValue ?? 0)
         }
     }
 }
