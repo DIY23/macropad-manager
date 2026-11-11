@@ -26,6 +26,11 @@ struct MacroPadManagerApp: App {
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                 Button("Export Profile…") { Exporter.export(app.profile) }
             }
+            CommandGroup(after: .saveItem) {
+                Divider()
+                Button("Clear Layer…") { Dialogs.clearLayer(app) }
+                Button("Clear Profile…") { Dialogs.clearProfile(app) }
+            }
         }
     }
 }
@@ -48,6 +53,41 @@ enum Importer {
         if panel.runModal() == .OK, let url = panel.url {
             try? app.store.importProfile(from: url)
             if let p = app.store.profiles.first { app.loadProfile(p) }
+        }
+    }
+}
+
+// MARK: - Destructive actions, always confirmed
+
+enum Dialogs {
+    @MainActor
+    static func confirm(_ title: String, _ info: String, _ confirmTitle: String,
+                        _ action: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = info
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: confirmTitle)
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn { action() }
+    }
+
+    @MainActor
+    static func clearLayer(_ app: AppState) {
+        let n = app.currentLayer.name
+        confirm("Clear “\(n)”?",
+                "This removes every binding on layer \(app.layerIndex + 1) of this profile. The pad keeps its current keymap until you write to it.",
+                "Clear Layer") {
+            app.clearLayer()
+        }
+    }
+
+    @MainActor
+    static func clearProfile(_ app: AppState) {
+        confirm("Clear “\(app.profile.name)”?",
+                "This removes every binding on all three layers of this profile. The pad keeps its current keymap until you write to it.",
+                "Clear Profile") {
+            app.clearProfile()
         }
     }
 }

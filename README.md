@@ -24,6 +24,9 @@ running.
 - **Target keyboard layout**: shortcuts are stored as *characters*, not key
   positions, and translated for the layout of the Mac the pad will be used on —
   so the same profile works on a QWERTY and an AZERTY machine.
+- **Several pads at once**: the Devices list becomes a selector, and writes go to
+  the selected pad.
+- **Clear Layer / Clear Profile** in the menu, both behind a confirmation.
 
 ## Requirements
 

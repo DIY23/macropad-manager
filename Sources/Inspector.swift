@@ -14,6 +14,7 @@ struct InspectorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                knobPicker
 
                 VStack(alignment: .leading, spacing: 8) {
                     label("ACTION")
@@ -72,6 +73,22 @@ struct InspectorView: View {
             if let c = control {
                 RecorderSheet { captured in app.set(c, captured) }
             }
+        }
+    }
+
+    /// Knobs have three separately programmable actions; without this you could
+    /// only ever reach "press" by clicking.
+    @ViewBuilder var knobPicker: some View {
+        if case .knob(let k, let part)? = app.selection {
+            Picker("", selection: Binding(
+                get: { part },
+                set: { app.selection = .knob(k, $0) })) {
+                Text("⟲ Left").tag(KnobPart.ccw)
+                Text("Press").tag(KnobPart.press)
+                Text("Right ⟳").tag(KnobPart.cw)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         }
     }
 

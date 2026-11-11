@@ -10,17 +10,14 @@ final class AppState: ObservableObject {
     let store = ProfileStore()
     let writer = PadWriter()
 
-    /// Nested ObservableObjects don't republish into SwiftUI through AppState,
-    /// so forward their change notifications or the UI silently goes stale.
     private var cancellables = Set<AnyCancellable>()
 
     @Published var profile: PadProfile
     @Published var layerIndex: Int = 0
     @Published var selection: ControlID? = .button(0)
+    @Published var selectedDeviceID: String?
 
-    /// The keyboard layout of the Mac the pad will be *used* on. Shortcuts are
-    /// stored as characters and translated into key positions through this
-    /// layout, so one profile works on a QWERTY and an AZERTY machine alike.
+    /// The layout of the Mac the pad will be *used* on.
     @Published var targetLayoutID: String {
         didSet {
             LayoutContext.targetID = targetLayoutID
@@ -46,8 +43,12 @@ final class AppState: ObservableObject {
         DeviceModel.all.first { $0.id == profile.deviceModelID } ?? .k8850
     }
 
+    var writableDevices: [ConnectedDevice] { transport.devices.filter(\.isWritable) }
+
+    /// The device being edited for: explicitly chosen, else the first one.
     var connected: ConnectedDevice? {
-        transport.devices.first { $0.isWritable }
+        if let id = selectedDeviceID, let d = writableDevices.first(where: { $0.id == id }) { return d }
+        return writableDevices.first
     }
 
     var currentLayer: Layer {
@@ -84,6 +85,25 @@ final class AppState: ObservableObject {
         guard let dev = connected else { return }
         writer.write(profile: profile, model: model, transport: transport, deviceID: dev.id)
     }
+
+    // MARK: destructive edits (caller confirms first)
+
+    func clearLayer() {
+        guard layerIndex < profile.layers.count else { return }
+        profile.layers[layerIndex].bindings.removeAll()
+        store.save(profile)
+    }
+
+    func clearProfile() {
+        for i in profile.layers.indices { profile.layers[i].bindings.removeAll() }
+        store.save(profile)
+    }
+
+    func renameCurrentLayer(_ name: String) {
+        guard layerIndex < profile.layers.count else { return }
+        profile.layers[layerIndex].name = name
+        persistSoon()
+    }
 }
 
 // MARK: - Root
@@ -94,17 +114,66 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 215, ideal: 235, max: 290)
+                .navigationSplitViewColumnWidth(min: 215, ideal: 240, max: 300)
         } detail: {
-            HStack(spacing: 0) {
-                CanvasView()
+            VStack(spacing: 0) {
+                HeaderBar()
                 Divider()
-                InspectorView()
-                    .frame(width: 300)
+                HStack(spacing: 0) {
+                    CanvasView()
+                    Divider()
+                    InspectorView().frame(width: 300)
+                }
             }
         }
-        .navigationTitle("MacroPad Manager")
-        .frame(minWidth: 1000, minHeight: 640)
+        .frame(minWidth: 1040, minHeight: 660)
+    }
+}
+
+// MARK: - Header bar
+
+struct HeaderBar: View {
+    @EnvironmentObject var app: AppState
+
+    var body: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(app.profile.name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+                Text("\(app.model.displayName) · Layer \(app.layerIndex + 1) · \(app.currentLayer.name)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 10)
+
+            if case .failed(let msg) = app.writer.phase {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).help(msg)
+            }
+            if case .finished(let n) = app.writer.phase {
+                Label("\(n) written", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 11)).foregroundStyle(SidebarView.green)
+            }
+
+            Picker("", selection: $app.targetLayoutID) {
+                ForEach(SidebarView.layoutOptions) { d in
+                    Text(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name).tag(d.id)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 170)
+            .help("Keyboard layout of the Mac the pad will be used on")
+
+            ConnectionPill()
+            WriteButton()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 }
 
@@ -113,7 +182,6 @@ struct ContentView: View {
 struct SidebarView: View {
     @EnvironmentObject var app: AppState
 
-    /// Enabled layouts first (what people actually use), then everything else.
     static let layoutOptions: [LayoutDescriptor] = {
         var seen = Set<String>()
         var out: [LayoutDescriptor] = []
@@ -124,18 +192,9 @@ struct SidebarView: View {
 
     var body: some View {
         List {
-            Section("DEVICE") {
-                if let dev = app.connected {
-                    HStack(spacing: 9) {
-                        Circle().fill(Self.green).frame(width: 7, height: 7)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(app.model.displayName).font(.system(size: 12, weight: .medium))
-                            Text(String(format: "%04x:%04x · USB", dev.vendorID, dev.productID))
-                                .font(.system(size: 10)).foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                } else {
+            // Becomes a real selector when several pads are attached.
+            Section("DEVICES") {
+                if app.writableDevices.isEmpty {
                     HStack(spacing: 9) {
                         Circle().fill(.secondary.opacity(0.4)).frame(width: 7, height: 7)
                         VStack(alignment: .leading, spacing: 1) {
@@ -144,43 +203,28 @@ struct SidebarView: View {
                                 .font(.system(size: 10)).foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.vertical, 2)
-                }
-            }
-
-            Section("TARGET LAYOUT") {
-                Picker("", selection: $app.targetLayoutID) {
-                    ForEach(Self.layoutOptions) { d in
-                        Text(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name)
-                            .tag(d.id)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                Text("Shortcuts are translated into key positions for this layout.")
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Section("LAYERS") {
-                ForEach(Array(app.profile.layers.enumerated()), id: \.offset) { idx, layer in
-                    Button {
-                        app.layerIndex = idx
-                    } label: {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(app.layerIndex == idx ? Self.green : Color.secondary.opacity(0.25))
-                                .frame(width: 6, height: 6)
-                            Text(layer.name).font(.system(size: 12))
-                            Spacer()
-                            Text("\(layer.bindings.count)").font(.system(size: 10))
-                                .foregroundStyle(.secondary).monospacedDigit()
+                } else {
+                    ForEach(app.writableDevices) { dev in
+                        Button { app.selectedDeviceID = dev.id } label: {
+                            HStack(spacing: 9) {
+                                Circle()
+                                    .fill(app.connected?.id == dev.id
+                                          ? SidebarView.green : Color.secondary.opacity(0.35))
+                                    .frame(width: 7, height: 7)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(dev.model?.displayName ?? dev.name)
+                                        .font(.system(size: 12, weight: .medium))
+                                    Text(String(format: "%04x:%04x", dev.vendorID, dev.productID))
+                                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .listRowBackground(app.connected?.id == dev.id
+                                           ? Color.primary.opacity(0.06) : Color.clear)
                     }
-                    .buttonStyle(.plain)
-                    .listRowBackground(app.layerIndex == idx ? Color.primary.opacity(0.06) : Color.clear)
                 }
             }
 
@@ -190,15 +234,13 @@ struct SidebarView: View {
                         HStack(spacing: 8) {
                             Image(systemName: p.id == app.profile.id ? "doc.fill" : "doc")
                                 .font(.system(size: 11)).foregroundStyle(.secondary)
-                            Text(p.name).font(.system(size: 12))
+                            Text(p.name).font(.system(size: 12)).lineLimit(1)
                             Spacer()
-                            if p.id == app.profile.id {
-                                Text("open").font(.system(size: 9)).foregroundStyle(.secondary)
-                            }
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .listRowBackground(p.id == app.profile.id ? Color.primary.opacity(0.06) : Color.clear)
                     .contextMenu {
                         Button("Duplicate") { app.store.duplicate(p) }
                         Button("Export…") { Exporter.export(p) }
@@ -217,15 +259,27 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
             }
+
+            // Layers live inside a profile, so they follow it.
+            Section("LAYERS") {
+                ForEach(Array(app.profile.layers.enumerated()), id: \.offset) { idx, layer in
+                    Button { app.layerIndex = idx } label: {
+                        HStack(spacing: 9) {
+                            Text("\(idx + 1)")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundStyle(app.layerIndex == idx ? .primary : .secondary)
+                                .frame(width: 10)
+                            Text(layer.name).font(.system(size: 12)).lineLimit(1)
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(app.layerIndex == idx ? Color.primary.opacity(0.06) : Color.clear)
+                }
+            }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 6) {
-                Text(app.profile.name).font(.system(size: 10)).foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 14).padding(.vertical, 8)
-        }
     }
 
     static let green = Color(red: 0.18, green: 0.78, blue: 0.35)
@@ -253,15 +307,12 @@ struct WriteButton: View {
         switch app.writer.phase {
         case .writing(let done, let total):
             HStack(spacing: 8) {
-                ProgressView(value: Double(done), total: Double(total))
-                    .frame(width: 90)
+                ProgressView(value: Double(done), total: Double(max(total, 1))).frame(width: 90)
                 Text("\(Int(Double(done) / Double(max(total, 1)) * 100))%")
                     .font(.system(size: 11)).monospacedDigit()
             }
         default:
-            Button {
-                app.writeToPad()
-            } label: {
+            Button { app.writeToPad() } label: {
                 Label("Write to Pad", systemImage: "arrow.down.circle.fill")
             }
             .buttonStyle(.borderedProminent)
@@ -277,56 +328,12 @@ struct CanvasView: View {
     @EnvironmentObject var app: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(app.profile.layers.indices.contains(app.layerIndex)
-                         ? app.profile.layers[app.layerIndex].name : "Layer")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text("\(app.model.buttonCount) keys · \(app.model.knobCount) encoders · on-device")
-                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer()
-                if case .failed(let msg) = app.writer.phase {
-                    Label(msg, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11)).foregroundStyle(.orange).lineLimit(2)
-                }
-                if case .finished(let n) = app.writer.phase {
-                    Label("\(n) reports written", systemImage: "checkmark.circle.fill")
-                        .font(.system(size: 11)).foregroundStyle(SidebarView.green)
-                }
-                ConnectionPill()
-                WriteButton()
-            }
-            .padding(.horizontal, 22).padding(.vertical, 14)
-            .background(.bar)
-            .overlay(alignment: .bottom) { Divider() }
-
-            ScrollView {
-                VStack(spacing: 20) {
-                    PadPlateView()
-                        .frame(maxWidth: 760)
-                    Legend()
-                }
-                .padding(28)
-                .frame(maxWidth: .infinity)
-            }
-            .background(Color(nsColor: .underPageBackgroundColor).opacity(0.5))
+        GeometryReader { geo in
+            PadPlateView()
+                .frame(maxWidth: min(780, max(geo.size.width - 56, 320)))
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
-    }
-}
-
-struct Legend: View {
-    var body: some View {
-        HStack(spacing: 16) {
-            item("square.grid.3x3", "Keys 1–16, left→right, top→bottom")
-            item("circle.dashed", "Knobs 1–3, top→bottom")
-            item("light.beacon.max", "Layer shown by the 3 LEDs")
-        }
-        .font(.system(size: 10)).foregroundStyle(.secondary)
-    }
-    func item(_ s: String, _ t: String) -> some View {
-        HStack(spacing: 5) { Image(systemName: s); Text(t) }
+        .background(Color(nsColor: .underPageBackgroundColor).opacity(0.5))
     }
 }
 
@@ -335,17 +342,25 @@ struct Legend: View {
 struct PadPlateView: View {
     @EnvironmentObject var app: AppState
 
+    /// 0...1 while writing, nil otherwise, so the indicator strip means something.
+    var writeProgress: Double? {
+        if case .writing(let done, let total) = app.writer.phase, total > 0 {
+            return Double(done) / Double(total)
+        }
+        return nil
+    }
+
     var body: some View {
         GeometryReader { geo in
             let pad = min(geo.size.width, geo.size.height * 1.42)
             ZStack(alignment: .topLeading) {
                 plate(pad)
-                HStack(alignment: .center, spacing: pad * 0.042) {
+                HStack(alignment: .center, spacing: pad * 0.038) {
                     keyGrid(pad)
                     statusStrip(pad)
                     knobColumn(pad)
                 }
-                .frame(width: pad * 0.86)
+                .frame(width: pad * 0.88)
                 .frame(width: pad, height: pad * 0.70, alignment: .bottom)
                 .padding(.bottom, pad * 0.018)
                 if app.model.hasLayerLEDs {
@@ -373,7 +388,7 @@ struct PadPlateView: View {
     }
 
     func keyGrid(_ pad: CGFloat) -> some View {
-        let size = pad * 0.545
+        let size = pad * 0.585
         let gap = size * 0.045
         let cell = (size - gap * 3) / 4
         return VStack(spacing: gap) {
@@ -381,8 +396,9 @@ struct PadPlateView: View {
                 HStack(spacing: gap) {
                     ForEach(0..<app.model.columns, id: \.self) { c in
                         let idx = r * app.model.columns + c
-                        let sel = app.selection == .button(idx)
-                        keyCap(side: cell, selected: sel, action: app.action(.button(idx)))
+                        keyCap(side: cell,
+                               selected: app.selection == .button(idx),
+                               action: app.action(.button(idx)))
                             .onTapGesture { app.selection = .button(idx) }
                     }
                 }
@@ -403,15 +419,17 @@ struct PadPlateView: View {
                 .shadow(color: .black.opacity(0.35), radius: side * 0.05, y: side * 0.035)
 
             if !action.isEmpty {
-                Text(action.kind == .keystroke ? action.display : "")
-                    .font(.system(size: side * 0.19, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(1).minimumScaleFactor(0.5)
-                    .padding(.horizontal, 3)
-                if action.kind != .keystroke {
+                if action.kind == .keystroke {
+                    Text(action.display.uppercased())
+                        .font(.system(size: side * 0.27, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.93))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.36)
+                        .padding(.horizontal, side * 0.05)
+                } else {
                     Image(systemName: action.kind == .media ? "speaker.wave.2.fill" : "computermouse.fill")
-                        .font(.system(size: side * 0.22))
-                        .foregroundStyle(.white.opacity(0.75))
+                        .font(.system(size: side * 0.30))
+                        .foregroundStyle(.white.opacity(0.8))
                 }
             }
 
@@ -425,17 +443,21 @@ struct PadPlateView: View {
         .contentShape(Rectangle())
     }
 
+    /// Dim at rest, fills top-to-bottom while writing.
     func statusStrip(_ pad: CGFloat) -> some View {
         let h = pad * 0.26
+        let p = writeProgress
         return VStack(spacing: h * 0.06) {
             ForEach(0..<5, id: \.self) { i in
+                let lit = (p.map { Double(i) < ceil($0 * 5.0) }) ?? false
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(i < (app.layerIndex + 1) ? SidebarView.green : Color(white: 0.70).opacity(0.5))
+                    .fill(lit ? SidebarView.green : Color(white: 0.70).opacity(0.5))
                     .overlay(RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .strokeBorder(.black.opacity(0.12), lineWidth: 0.5))
             }
         }
         .frame(width: h * 0.05, height: h)
+        .help(p == nil ? "Write progress indicator" : "Writing…")
     }
 
     func layerLEDs(_ pad: CGFloat) -> some View {
@@ -447,19 +469,20 @@ struct PadPlateView: View {
                     .shadow(color: i == app.layerIndex ? SidebarView.green.opacity(0.9) : .clear, radius: 4)
             }
         }
+        .help("Layer LEDs — which layer the pad is on")
     }
 
     func knobColumn(_ pad: CGFloat) -> some View {
-        let width = pad * 0.205
-        return VStack(spacing: width * 0.14) {
+        let width = pad * 0.165
+        return VStack(spacing: width * 0.16) {
             ForEach(0..<app.model.knobCount, id: \.self) { k in
                 let ratio = k < app.model.knobs.count ? app.model.knobs[k].diameterRatio : 1.0
-                knob(index: k, dia: width * ratio, selected: isKnobSelected(k))
+                knob(index: k, dia: width * ratio, selected: selectedPart(k))
             }
         }
     }
 
-    func isKnobSelected(_ k: Int) -> KnobPart? {
+    func selectedPart(_ k: Int) -> KnobPart? {
         for p in KnobPart.allCases where app.selection == .knob(k, p) { return p }
         return nil
     }
@@ -484,31 +507,34 @@ struct PadPlateView: View {
                 Circle().strokeBorder(SidebarView.green, lineWidth: 2.5)
                     .shadow(color: SidebarView.green.opacity(0.6), radius: 5)
             }
+            // Which part is being edited, drawn on the knob itself.
+            if let part = selected {
+                VStack(spacing: 1) {
+                    Image(systemName: part == .ccw ? "arrow.counterclockwise"
+                                    : part == .cw ? "arrow.clockwise" : "arrow.down.to.line")
+                        .font(.system(size: dia * 0.14, weight: .bold))
+                    Text(part == .ccw ? "TURN LEFT" : part == .cw ? "TURN RIGHT" : "PRESS")
+                        .font(.system(size: dia * 0.075, weight: .bold))
+                }
+                .foregroundStyle(SidebarView.green)
+                .shadow(color: .black.opacity(0.5), radius: 2)
+            }
         }
         .frame(width: dia, height: dia)
-        .overlay(alignment: .leading) {
-            if selected == .ccw {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(SidebarView.green).offset(x: -16)
+        // Three hit zones: left third turns left, middle presses, right turns right.
+        .overlay(
+            HStack(spacing: 0) {
+                Color.clear.contentShape(Rectangle())
+                    .onTapGesture { app.selection = .knob(index, .ccw) }
+                    .help("Turn left")
+                Color.clear.contentShape(Rectangle())
+                    .onTapGesture { app.selection = .knob(index, .press) }
+                    .help("Press")
+                Color.clear.contentShape(Rectangle())
+                    .onTapGesture { app.selection = .knob(index, .cw) }
+                    .help("Turn right")
             }
-        }
-        .overlay(alignment: .trailing) {
-            if selected == .cw {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(SidebarView.green).offset(x: 16)
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if selected == .press {
-                Image(systemName: "arrow.down.to.line")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(SidebarView.green).offset(y: 14)
-            }
-        }
-        .contentShape(Circle())
-        .onTapGesture { app.selection = .knob(index, .press) }
+        )
         .contextMenu {
             Button("Turn left") { app.selection = .knob(index, .ccw) }
             Button("Press") { app.selection = .knob(index, .press) }
