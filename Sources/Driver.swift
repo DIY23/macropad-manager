@@ -327,6 +327,9 @@ final class PadWriter: ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
 
+    /// Drops a "written" result so it cannot outlive the state it described.
+    func reset() { phase = .idle }
+
     func write(profile: PadProfile, model: DeviceModel, transport: HIDTransport, deviceID: String) {
         phase = .preparing
         guard let driver = DriverRegistry.driver(for: model) else {

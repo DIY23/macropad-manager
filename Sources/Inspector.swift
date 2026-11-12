@@ -119,8 +119,17 @@ struct InspectorView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(control?.title ?? "Nothing selected")
                 .font(.system(size: 17, weight: .semibold))
-            Text("\(app.profile.layers.indices.contains(app.layerIndex) ? app.profile.layers[app.layerIndex].name : "Layer") · written to the device")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+            HStack(spacing: 5) {
+                Text(app.profile.layers.indices.contains(app.layerIndex)
+                     ? app.profile.layers[app.layerIndex].name : "Layer")
+                if case .finished = app.writer.phase {
+                    Text("·").foregroundStyle(.tertiary)
+                    Label("written to the device", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(SidebarView.green)
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
         }
     }
 

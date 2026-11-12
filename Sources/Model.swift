@@ -165,6 +165,23 @@ enum MediaKey: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Compact form for tight places (knob captions draw on the pad itself).
+    var shortTitle: String {
+        switch self {
+        case .volumeUp:       return "VOL+"
+        case .volumeDown:     return "VOL−"
+        case .mute:           return "MUTE"
+        case .playPause:      return "PLAY"
+        case .nextTrack:      return "NEXT"
+        case .previousTrack:  return "PREV"
+        case .stop:           return "STOP"
+        case .brightnessUp:   return "BRI+"
+        case .brightnessDown: return "BRI−"
+        case .calculator:     return "CALC"
+        case .screenLock:     return "LOCK"
+        }
+    }
+
     /// SF Symbol drawn on the key face, distinct per action.
     var symbol: String {
         switch self {

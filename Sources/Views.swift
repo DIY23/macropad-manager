@@ -13,7 +13,9 @@ final class AppState: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     @Published var profile: PadProfile
-    @Published var layerIndex: Int = 0
+    @Published var layerIndex: Int = 0 {
+        didSet { if layerIndex != oldValue { writer.reset() } }
+    }
     @Published var selection: ControlID? = .button(0)
     @Published var selectedDeviceID: String?
 
@@ -76,6 +78,7 @@ final class AppState: ObservableObject {
     func set(_ c: ControlID, _ a: Action) {
         guard layerIndex < profile.layers.count else { return }
         profile.layers[layerIndex].set(c, a)
+        writer.reset()
         persistSoon()
     }
 
@@ -94,6 +97,7 @@ final class AppState: ObservableObject {
         profile = p
         layerIndex = 0
         selection = .button(0)
+        writer.reset()
     }
 
     func writeToPad() {
@@ -107,11 +111,13 @@ final class AppState: ObservableObject {
         guard layerIndex < profile.layers.count else { return }
         profile.layers[layerIndex].bindings.removeAll()
         store.save(profile)
+        writer.reset()
     }
 
     func clearProfile() {
         for i in profile.layers.indices { profile.layers[i].bindings.removeAll() }
         store.save(profile)
+        writer.reset()
     }
 
     func renameCurrentLayer(_ name: String) {
@@ -503,7 +509,7 @@ struct PadPlateView: View {
                 }
                 .frame(width: pad * 0.88)
                 .frame(width: pad, height: pad * 0.70, alignment: .bottom)
-                .padding(.bottom, pad * 0.018)
+                .padding(.bottom, pad * 0.034)
                 if app.model.hasLayerLEDs {
                     layerLEDs(pad)
                         .padding(.leading, pad * 0.045)
@@ -609,30 +615,44 @@ struct PadPlateView: View {
     }
 
     func knobColumn(_ pad: CGFloat) -> some View {
-        let width = pad * 0.165
-        return VStack(spacing: width * 0.22) {
+        let width = pad * 0.152
+        return VStack(spacing: width * 0.20) {
             ForEach(0..<app.model.knobCount, id: \.self) { k in
                 let ratio = k < app.model.knobs.count ? app.model.knobs[k].diameterRatio : 1.0
-                VStack(spacing: width * 0.07) {
+                VStack(spacing: width * 0.05) {
                     knob(index: k, dia: width * ratio, selected: selectedPart(k))
-                    let caption = knobCaption(k)
-                    if !caption.isEmpty {
-                        Text(caption)
-                            .font(.system(size: width * 0.115, weight: .medium))
-                            .foregroundStyle(.secondary)
+                    // Both turn directions, then the press, so no encoder action
+                    // is invisible.
+                    HStack(spacing: width * 0.06) {
+                        Text("⟲ \(knobLabel(k, .ccw))")
+                        Text("⟳ \(knobLabel(k, .cw))")
+                    }
+                    .font(.system(size: width * 0.115, weight: .semibold))
+                    .foregroundStyle(.primary.opacity(0.55))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(maxWidth: width * 1.5)
+
+                    let press = knobLabel(k, .press)
+                    if !press.isEmpty {
+                        Text("▣ \(press)")
+                            .font(.system(size: width * 0.115, weight: .semibold))
+                            .foregroundStyle(.primary.opacity(0.55))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                            .frame(maxWidth: width * 1.15)
+                            .minimumScaleFactor(0.5)
+                            .frame(maxWidth: width * 1.3)
                     }
                 }
             }
         }
     }
 
-    /// What the knob's press does, printed beside it so the encoder is not a blank.
-    func knobCaption(_ k: Int) -> String {
-        let a = app.action(.knob(k, .press))
-        return a.isEmpty ? "" : a.keyFace.uppercased()
+    /// What one encoder action does, as a short label for the pad drawing.
+    func knobLabel(_ k: Int, _ part: KnobPart) -> String {
+        let a = app.action(.knob(k, part))
+        if a.isEmpty { return "—" }
+        if a.kind == .media, let mk = MediaKey(rawValue: a.mediaKey) { return mk.shortTitle }
+        return a.keyFace.uppercased()
     }
 
     func selectedPart(_ k: Int) -> KnobPart? {
