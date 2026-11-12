@@ -250,6 +250,7 @@ struct HeaderActions: View {
                 .font(.system(size: 11))
         }
         .menuStyle(.borderlessButton)
+        .labelStyle(.titleAndIcon)
         .fixedSize()
         .help("Keyboard layout of the Mac the pad will be used on")
         .sheet(isPresented: $showLayoutChooser) {
@@ -457,8 +458,14 @@ struct WriteButton: View {
         default:
             Button { app.writeToPad() } label: {
                 Label("Write to Pad", systemImage: "arrow.down.circle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .labelStyle(.titleAndIcon)
+            .tint(SidebarView.green)
             .disabled(app.connected == nil)
             .help(app.connected == nil ? "Connect the macropad with its USB cable" : "Write all three layers")
         }
@@ -485,14 +492,6 @@ struct CanvasView: View {
 struct PadPlateView: View {
     @EnvironmentObject var app: AppState
 
-    /// 0...1 while writing, nil otherwise, so the indicator strip means something.
-    var writeProgress: Double? {
-        if case .writing(let done, let total) = app.writer.phase, total > 0 {
-            return Double(done) / Double(total)
-        }
-        return nil
-    }
-
     var body: some View {
         GeometryReader { geo in
             let pad = min(geo.size.width, geo.size.height * 1.42)
@@ -500,7 +499,6 @@ struct PadPlateView: View {
                 plate(pad)
                 HStack(alignment: .center, spacing: pad * 0.038) {
                     keyGrid(pad)
-                    statusStrip(pad)
                     knobColumn(pad)
                 }
                 .frame(width: pad * 0.88)
@@ -596,23 +594,6 @@ struct PadPlateView: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .help(action.display)
         }
-    }
-
-    /// Dim at rest, fills top-to-bottom while writing.
-    func statusStrip(_ pad: CGFloat) -> some View {
-        let h = pad * 0.26
-        let p = writeProgress
-        return VStack(spacing: h * 0.06) {
-            ForEach(0..<5, id: \.self) { i in
-                let lit = (p.map { Double(i) < ceil($0 * 5.0) }) ?? false
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(lit ? SidebarView.green : Color(white: 0.70).opacity(0.5))
-                    .overlay(RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .strokeBorder(.black.opacity(0.12), lineWidth: 0.5))
-            }
-        }
-        .frame(width: h * 0.05, height: h)
-        .help(p == nil ? "Write progress indicator" : "Writing…")
     }
 
     func layerLEDs(_ pad: CGFloat) -> some View {

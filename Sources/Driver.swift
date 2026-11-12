@@ -264,8 +264,11 @@ struct CH57xK8850Driver: DeviceDriver {
 
         case .media:
             guard let mk = MediaKey(rawValue: action.mediaKey) else { throw DriverError.nothingToWrite }
-            msg += [0x02, 0x00, 0x02, 0x00, 0x00,
-                    UInt8(mk.code & 0xFF), 0x00, 0x00, UInt8(mk.code >> 8)]
+            // Verified record format: one 3-byte entry (delay_hi, delay_lo BE,
+            // code) with the code being the LOW byte of the consumer usage.
+            // The old form sent count=2 with a zero second entry, which is not
+            // what this firmware expects.
+            msg += [0x02, 0x00, 0x01, 0x00, 0x00, UInt8(mk.code & 0xFF)]
 
         case .mouse:
             var mouse = [UInt8](repeating: 0, count: 17)

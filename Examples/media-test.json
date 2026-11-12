@@ -1,0 +1,239 @@
+{
+  "id": "B4021A2A-BEA5-47BC-93A7-FDC9066C3325",
+  "name": "Media Test",
+  "deviceModelID": "ch57x-k8850",
+  "notes": "Diagnostic: keys 1-11 are one media key each, keys 12-16 type a-e as a sanity check.",
+  "modified": "2026-11-12T00:56:55Z",
+  "layers": [
+    {
+      "name": "Media Test",
+      "bindings": {
+        "b0": {
+          "kind": "media",
+          "mediaKey": "volumeUp",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b1": {
+          "kind": "media",
+          "mediaKey": "volumeDown",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b2": {
+          "kind": "media",
+          "mediaKey": "mute",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b3": {
+          "kind": "media",
+          "mediaKey": "playPause",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b4": {
+          "kind": "media",
+          "mediaKey": "nextTrack",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b5": {
+          "kind": "media",
+          "mediaKey": "previousTrack",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b6": {
+          "kind": "media",
+          "mediaKey": "stop",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b7": {
+          "kind": "media",
+          "mediaKey": "brightnessUp",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b8": {
+          "kind": "media",
+          "mediaKey": "brightnessDown",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b9": {
+          "kind": "media",
+          "mediaKey": "calculator",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b10": {
+          "kind": "media",
+          "mediaKey": "screenLock",
+          "modifiers": [],
+          "tokens": [],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b11": {
+          "kind": "keystroke",
+          "mediaKey": "",
+          "modifiers": [],
+          "tokens": [
+            {
+              "kind": "character",
+              "value": "a"
+            }
+          ],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b12": {
+          "kind": "keystroke",
+          "mediaKey": "",
+          "modifiers": [],
+          "tokens": [
+            {
+              "kind": "character",
+              "value": "b"
+            }
+          ],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b13": {
+          "kind": "keystroke",
+          "mediaKey": "",
+          "modifiers": [],
+          "tokens": [
+            {
+              "kind": "character",
+              "value": "c"
+            }
+          ],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b14": {
+          "kind": "keystroke",
+          "mediaKey": "",
+          "modifiers": [],
+          "tokens": [
+            {
+              "kind": "character",
+              "value": "d"
+            }
+          ],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        },
+        "b15": {
+          "kind": "keystroke",
+          "mediaKey": "",
+          "modifiers": [],
+          "tokens": [
+            {
+              "kind": "character",
+              "value": "e"
+            }
+          ],
+          "mouseMode": "button",
+          "mouseButton": "left",
+          "mouseModifiers": [],
+          "wheel": 0,
+          "wheelDirection": -1,
+          "wheelMultiplier": 1
+        }
+      }
+    },
+    {
+      "name": "Layer 2",
+      "bindings": {}
+    },
+    {
+      "name": "Layer 3",
+      "bindings": {}
+    }
+  ]
+}

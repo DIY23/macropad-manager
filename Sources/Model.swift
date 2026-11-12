@@ -117,7 +117,7 @@ struct Action: Codable, Hashable {
             let resolver = LayoutContext.resolver
             let keys = tokens.map { t -> String in
                 switch t.kind {
-                case .character: return shift ? t.value.uppercased() : t.value
+                case .character: return t.value.uppercased()
                 case .usage:     return resolver.label(for: t.usageValue ?? 0, shift: shift)
                 }
             }.joined(separator: " ")

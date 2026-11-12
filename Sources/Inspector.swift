@@ -250,6 +250,10 @@ struct InspectorView: View {
                     }
                     .controlSize(.small)
                 }
+                Text("Wheel is not verified on this firmware yet — tell me what it does.")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Picker("", selection: Binding(
                     get: { action.mouseButton },
