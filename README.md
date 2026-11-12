@@ -177,6 +177,11 @@ software. `Tools/write/main.swift` does the same against real hardware.
 
 ## Known limitations
 
+- **A key cannot be truly unbound.** The firmware accepts every "no function" record
+  we tried (six encodings, verified on hardware) and silently keeps the old binding.
+  Use **Neutralise** instead: it points the key at ⌃⌥⇧⌘F20, a chord nothing is bound
+  to, so the key becomes inert in practice.
+
 - **No per-key RGB control.** The protocol encodes it, but this firmware variant's LED
   commands are not reversed yet, so the app does not touch lighting.
 - **No read-back.** The pad cannot report its current keymap, so profiles live in

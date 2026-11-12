@@ -57,6 +57,25 @@ struct InspectorView: View {
                 if action.kind != .none { labelEditor }
 
                 if control != nil {
+                    // The firmware has no working unbind: every "no function"
+                    // encoding we tried is accepted and ignored, so the key keeps
+                    // its old binding. Neutralising sends a chord nothing uses.
+                    Button {
+                        if let c = control {
+                            var a = Action(kind: .keystroke)
+                            a.modifiers = [.ctrl, .alt, .shift, .cmd]
+                            a.tokens = [.key(0x6F)]     // F20
+                            a.label = "—"
+                            app.set(c, a)
+                        }
+                    } label: {
+                        Label("Neutralise (unused ⌃⌥⇧⌘F20)", systemImage: "speaker.slash")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("The pad cannot truly unbind a key. This makes it send a chord nothing is bound to.")
+
                     Button(role: .destructive) {
                         if let c = control { app.set(c, .none) }
                     } label: {
