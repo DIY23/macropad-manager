@@ -16,7 +16,7 @@ struct MacroPadManagerApp: App {
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Write All Layers to Pad") {
-                    app.writeToPad()
+                    Dialogs.writeToPad(app)
                 }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
                 .disabled(app.connected == nil)
@@ -98,6 +98,20 @@ enum Dialogs {
                 "This removes every binding on all three layers of this profile. The pad keeps its current keymap until you write to it.",
                 "Clear Profile") {
             app.clearProfile()
+        }
+    }
+
+    @MainActor
+    static func writeToPad(_ app: AppState) {
+        let mac = KeyboardLayouts.currentID()
+        guard app.targetLayoutID != mac else {
+            app.writeToPad()
+            return
+        }
+        confirm("Write for \(KeyboardLayouts.name(for: app.targetLayoutID))?",
+                "The target layout is not the one this Mac is using (\(KeyboardLayouts.name(for: mac))). Shortcuts will be written for the other machine, so they may do the wrong thing here.",
+                "Write Anyway") {
+            app.writeToPad()
         }
     }
 

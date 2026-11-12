@@ -456,7 +456,7 @@ struct WriteButton: View {
                     .font(.system(size: 11)).monospacedDigit()
             }
         default:
-            Button { app.writeToPad() } label: {
+            Button { Dialogs.writeToPad(app) } label: {
                 Label("Write to Pad", systemImage: "arrow.down.circle.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .padding(.horizontal, 6)
