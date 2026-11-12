@@ -37,11 +37,12 @@ running.
 
 ## Install
 
-1. Open `MacroPadManager-1.0.0.dmg` and drag **MacroPad Manager** to Applications.
+1. Open `MacroPadManager-1.8.0.dmg` and drag **MacroPad Manager** to Applications.
 2. The build is **ad-hoc signed**, not notarized. The first launch must be
    **right-click → Open**, or Gatekeeper will refuse it.
 
-   If macOS still complains, clear the quarantine flag:
+   Clear the quarantine flag — this also matters for **Launchpad**, which will not
+   index a quarantined, non-notarized app, so the app appears to be missing:
 
    ```bash
    xattr -dr com.apple.quarantine "/Applications/MacroPad Manager.app"
