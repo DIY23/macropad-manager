@@ -274,12 +274,17 @@ struct CH57xK8850Driver: DeviceDriver {
                            | (action.mouseModifiers.contains(.shift) ? 0x02 : 0)
                            | (action.mouseModifiers.contains(.alt) ? 0x04 : 0)
             mouse[4] = mm
-            switch action.mouseButton {
-            case "right":  mouse[7] = 0x02
-            case "middle": mouse[7] = 0x04
-            default:       mouse[7] = 0x01
+            if action.isWheel {
+                // Wheel turns carry no button bits — a click and a scroll are
+                // different events and setting both would fight each other.
+                mouse[16] = UInt8(truncatingIfNeeded: action.wheelValue)
+            } else {
+                switch action.mouseButton {
+                case "right":  mouse[7] = 0x02
+                case "middle": mouse[7] = 0x04
+                default:       mouse[7] = 0x01
+                }
             }
-            if action.wheel != 0 { mouse[16] = UInt8(truncatingIfNeeded: action.wheel) }
             msg += [0x03]
             msg += mouse
         }

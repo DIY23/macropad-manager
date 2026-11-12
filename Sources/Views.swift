@@ -118,6 +118,20 @@ final class AppState: ObservableObject {
         persistSoon()
     }
 
+    func renameLayer(_ index: Int, to name: String) {
+        guard index < profile.layers.count, !name.isEmpty else { return }
+        profile.layers[index].name = name
+        persistSoon()
+    }
+
+    func renameProfile(_ id: UUID, to name: String) {
+        guard let i = store.profiles.firstIndex(where: { $0.id == id }), !name.isEmpty else { return }
+        var p = store.profiles[i]
+        p.name = name
+        store.save(p)
+        if profile.id == id { profile.name = name }
+    }
+
     // MARK: pinned layouts
 
     func isPinned(_ id: String) -> Bool { pinnedLayoutIDs.contains(id) }
@@ -299,18 +313,18 @@ struct SidebarView: View {
 
             Section("PROFILES") {
                 ForEach(app.store.profiles) { p in
-                    Button { app.loadProfile(p) } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: p.id == app.profile.id ? "doc.fill" : "doc")
-                                .font(.system(size: 11)).foregroundStyle(.secondary)
-                            Text(p.name).font(.system(size: 12)).lineLimit(1)
-                            Spacer()
-                        }
-                        .contentShape(Rectangle())
+                    HStack(spacing: 8) {
+                        Image(systemName: p.id == app.profile.id ? "doc.fill" : "doc")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(p.name).font(.system(size: 12)).lineLimit(1)
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { Dialogs.renameProfile(app, p) }
+                    .onTapGesture { app.loadProfile(p) }
                     .listRowBackground(p.id == app.profile.id ? Color.primary.opacity(0.06) : Color.clear)
                     .contextMenu {
+                        Button("Rename…") { Dialogs.renameProfile(app, p) }
                         Button("Duplicate") { app.store.duplicate(p) }
                         Button("Export…") { Exporter.export(p) }
                         Divider()
@@ -332,22 +346,30 @@ struct SidebarView: View {
             // Layers live inside a profile, so they follow it.
             Section("LAYERS") {
                 ForEach(Array(app.profile.layers.enumerated()), id: \.offset) { idx, layer in
-                    Button { app.layerIndex = idx } label: {
-                        HStack(spacing: 9) {
-                            Text("\(idx + 1)")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundStyle(app.layerIndex == idx ? .primary : .secondary)
-                                .frame(width: 10)
-                            Text(layer.name).font(.system(size: 12)).lineLimit(1)
-                            Spacer()
-                        }
-                        .contentShape(Rectangle())
+                    HStack(spacing: 9) {
+                        Text("\(idx + 1)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(app.layerIndex == idx ? .primary : .secondary)
+                            .frame(width: 10)
+                        Text(layer.name).font(.system(size: 12)).lineLimit(1)
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { Dialogs.renameLayer(app, index: idx, current: layer.name) }
+                    .onTapGesture { app.layerIndex = idx }
                     .listRowBackground(app.layerIndex == idx ? Color.primary.opacity(0.06) : Color.clear)
+                    .contextMenu {
+                        Button("Rename…") { Dialogs.renameLayer(app, index: idx, current: layer.name) }
+                        Button("Copy Layer") { app.layerIndex = idx; app.copyCurrentLayer() }
+                        Button("Paste Layer") { app.layerIndex = idx; Dialogs.pasteLayer(app) }
+                            .disabled(!app.canPasteLayer)
+                        Divider()
+                        Button("Clear Layer…", role: .destructive) { app.layerIndex = idx; Dialogs.clearLayer(app) }
+                    }
                 }
             }
         }
+        .padding(.top, 20)      // clears the traffic lights (window uses a hidden title bar)
         .listStyle(.sidebar)
     }
 

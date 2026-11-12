@@ -75,14 +75,21 @@ struct Action: Codable, Hashable {
     /// makes a profile portable between QWERTY and AZERTY machines.
     var tokens: [KeyToken] = []
     var mediaKey: String = ""           // MediaKey.rawValue
+    var mouseMode: String = "button"    // "button" | "wheel" — never both
     var mouseButton: String = "left"    // left | right | middle
-    var clickCount: Int = 1
-    var wheel: Int = 0
+    var wheelDirection: Int = -1        // -1 down, +1 up
+    var wheelMultiplier: Int = 1
+    var wheel: Int = 0                  // legacy: derived from mode when encoding
     var mouseModifiers: Set<Modifier> = []
 
     static let none = Action(kind: .none)
 
     var isEmpty: Bool { kind == .none }
+
+    /// A mouse binding is either a click or a wheel turn, not both.
+    var isWheel: Bool { mouseMode == "wheel" || (mouseMode.isEmpty && wheel != 0) }
+
+    var wheelValue: Int { wheelMultiplier * (wheelDirection >= 0 ? 1 : -1) }
 
     /// Human label for the UI, e.g. "⌘⇧Z" or "Volume up".
     var display: String {
@@ -90,7 +97,9 @@ struct Action: Codable, Hashable {
         case .none: return "Nothing"
         case .media: return MediaKey(rawValue: mediaKey)?.title ?? mediaKey
         case .mouse:
-            if wheel != 0 { return "Wheel \(wheel > 0 ? "up" : "down")" }
+            if isWheel {
+                return "Wheel \(wheelDirection > 0 ? "up" : "down")" + (wheelMultiplier > 1 ? " ×\(wheelMultiplier)" : "")
+            }
             return "\(mouseButton.capitalized) click"
         case .keystroke:
             if tokens.isEmpty { return "—" }

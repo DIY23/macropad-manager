@@ -14,6 +14,11 @@ final class ProfileStore: ObservableObject {
     private let fm = FileManager.default
 
     var root: URL {
+        // Lets tests and screenshots run against a throwaway store without
+        // touching the real one.
+        if let override = ProcessInfo.processInfo.environment["MPM_SUPPORT_DIR"] {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory())
         return base.appendingPathComponent("MacroPad Manager", isDirectory: true)

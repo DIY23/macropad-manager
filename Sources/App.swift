@@ -13,6 +13,7 @@ struct MacroPadManagerApp: App {
                 .frame(minWidth: 1000, minHeight: 640)
         }
         .windowToolbarStyle(.unified(showsTitle: false))
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Write All Layers to Pad") {
@@ -110,5 +111,35 @@ enum Dialogs {
                 "Replace Layer") {
             app.pasteLayerOverCurrent()
         }
+    }
+
+    // MARK: rename
+
+    @MainActor
+    static func promptText(title: String, initial: String, action: @escaping (String) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = " "
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        field.stringValue = initial
+        field.placeholderString = "Name"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        if alert.runModal() == .alertFirstButtonReturn {
+            let v = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !v.isEmpty { action(v) }
+        }
+    }
+
+    @MainActor
+    static func renameProfile(_ app: AppState, _ p: PadProfile) {
+        promptText(title: "Rename Profile", initial: p.name) { app.renameProfile(p.id, to: $0) }
+    }
+
+    @MainActor
+    static func renameLayer(_ app: AppState, index: Int, current: String) {
+        promptText(title: "Rename Layer \(index + 1)", initial: current) { app.renameLayer(index, to: $0) }
     }
 }

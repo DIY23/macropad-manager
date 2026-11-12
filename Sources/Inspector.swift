@@ -164,32 +164,63 @@ struct InspectorView: View {
     var mouseEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
             label("MOUSE")
-            Picker("Button", selection: Binding(
-                get: { action.mouseButton },
+            Picker("", selection: Binding(
+                get: { action.isWheel ? "wheel" : "button" },
                 set: { v in
                     guard let c = control else { return }
-                    var a = action; a.kind = .mouse; a.mouseButton = v; a.wheel = 0
+                    var a = action; a.kind = .mouse; a.mouseMode = v
                     app.set(c, a)
                 })) {
-                Text("Left").tag("left")
-                Text("Right").tag("right")
-                Text("Middle").tag("middle")
+                Text("Button").tag("button")
+                Text("Wheel").tag("wheel")
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
 
-            HStack {
-                Text("Wheel").font(.system(size: 11))
-                Spacer()
-                Stepper(value: Binding(
-                    get: { action.wheel },
+            if action.isWheel {
+                Picker("", selection: Binding(
+                    get: { action.wheelDirection >= 0 ? "up" : "down" },
                     set: { v in
                         guard let c = control else { return }
-                        var a = action; a.kind = .mouse; a.wheel = v
+                        var a = action; a.kind = .mouse; a.mouseMode = "wheel"
+                        a.wheelDirection = (v == "up") ? 1 : -1
                         app.set(c, a)
-                    }), in: -10...10) {
-                    Text("\(action.wheel)").font(.system(size: 11)).monospacedDigit()
+                    })) {
+                    Label("Up", systemImage: "arrow.up").tag("up")
+                    Label("Down", systemImage: "arrow.down").tag("down")
                 }
-                .controlSize(.small)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                HStack {
+                    Text("Steps per notch").font(.system(size: 11))
+                    Spacer()
+                    Stepper(value: Binding(
+                        get: { action.wheelMultiplier },
+                        set: { v in
+                            guard let c = control else { return }
+                            var a = action; a.kind = .mouse; a.mouseMode = "wheel"
+                            a.wheelMultiplier = v
+                            app.set(c, a)
+                        }), in: 1...20) {
+                        Text("\(action.wheelMultiplier)").font(.system(size: 11)).monospacedDigit()
+                    }
+                    .controlSize(.small)
+                }
+            } else {
+                Picker("", selection: Binding(
+                    get: { action.mouseButton },
+                    set: { v in
+                        guard let c = control else { return }
+                        var a = action; a.kind = .mouse; a.mouseMode = "button"; a.mouseButton = v
+                        app.set(c, a)
+                    })) {
+                    Text("Left").tag("left")
+                    Text("Right").tag("right")
+                    Text("Middle").tag("middle")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
         }
     }
