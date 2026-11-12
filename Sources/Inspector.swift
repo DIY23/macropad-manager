@@ -54,6 +54,8 @@ struct InspectorView: View {
                 case .none:      EmptyView()
                 }
 
+                if action.kind != .none { labelEditor }
+
                 if control != nil {
                     Button(role: .destructive) {
                         if let c = control { app.set(c, .none) }
@@ -89,6 +91,27 @@ struct InspectorView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+        }
+    }
+
+    /// Free text drawn on the key face instead of the shortcut — the Stream Deck
+    /// convention: label by intent, not by key combination.
+    var labelEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            label("KEY LABEL")
+            TextField(action.display, text: Binding(
+                get: { action.label ?? "" },
+                set: { v in
+                    guard let c = control else { return }
+                    var a = action
+                    let t = v.trimmingCharacters(in: .whitespaces)
+                    a.label = t.isEmpty ? nil : v
+                    app.set(c, a)
+                }))
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+            Text("Shown on the key. Leave empty to show the shortcut.")
+                .font(.system(size: 10)).foregroundStyle(.tertiary)
         }
     }
 
@@ -141,7 +164,27 @@ struct InspectorView: View {
             }
             Text("Recorded as characters, resolved to keys for the target layout.")
                 .font(.system(size: 10)).foregroundStyle(.tertiary)
+
+            if let bad = unresolvedCharacter {
+                Label("“\(bad)” cannot be typed on \(KeyboardLayouts.name(for: app.targetLayoutID))",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+
+    /// First character token the target layout cannot produce, if any.
+    var unresolvedCharacter: String? {
+        guard action.kind == .keystroke else { return nil }
+        let shift = action.modifiers.contains(.shift) || action.modifiers.contains(.rshift)
+        let r = LayoutContext.resolver
+        for t in action.tokens where t.kind == .character {
+            let want = shift ? t.value.uppercased() : t.value
+            if r.resolve(character: want) == nil { return t.value }
+        }
+        return nil
     }
 
     var mediaEditor: some View {

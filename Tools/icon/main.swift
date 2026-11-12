@@ -9,7 +9,7 @@ let img = NSImage(size: NSSize(width: S, height: S))
 img.lockFocus()
 guard let ctx = NSGraphicsContext.current?.cgContext else { exit(1) }
 
-let inset: CGFloat = 64
+let inset: CGFloat = 100   // macOS icon grid: 824/1024 plate inside the canvas
 let rect = CGRect(x: inset, y: inset, width: S - inset * 2, height: S - inset * 2)
 let radius = rect.width * 0.2237
 

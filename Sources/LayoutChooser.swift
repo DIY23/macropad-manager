@@ -13,8 +13,18 @@ struct LayoutChooserSheet: View {
     private var all: [LayoutDescriptor] { Self.allLayouts }
 
     private var filtered: [LayoutDescriptor] {
-        guard !search.trimmingCharacters(in: .whitespaces).isEmpty else { return all }
-        return all.filter { $0.name.localizedCaseInsensitiveContains(search) || $0.id.localizedCaseInsensitiveContains(search) }
+        let all = Self.allLayouts
+        let base = search.trimmingCharacters(in: .whitespaces).isEmpty
+            ? all
+            : all.filter { $0.name.localizedCaseInsensitiveContains(search) || $0.id.localizedCaseInsensitiveContains(search) }
+        // This Mac's layout first, then the current target, then everything else.
+        let mac = KeyboardLayouts.currentID()
+        var head: [LayoutDescriptor] = []
+        if let m = base.first(where: { $0.id == mac }) { head.append(m) }
+        if let t = base.first(where: { $0.id == app.targetLayoutID }), !head.contains(where: { $0.id == t.id }) {
+            head.append(t)
+        }
+        return head + base.filter { d in !head.contains(where: { $0.id == d.id }) }
     }
 
     var body: some View {

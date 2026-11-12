@@ -42,7 +42,9 @@ final class AppState: ObservableObject {
         LayoutContext.targetID = id
 
         let savedPins = UserDefaults.standard.stringArray(forKey: "pinnedLayoutIDs")
-        pinnedLayoutIDs = savedPins ?? (KeyboardLayouts.enabled().map(\.id) + [id])
+        var seen = Set<String>()
+        pinnedLayoutIDs = (savedPins ?? (KeyboardLayouts.enabled().map(\.id) + [id]))
+            .filter { seen.insert($0).inserted }
 
         if let first = store.profiles.first { profile = first }
         else { profile = StarterProfile.make() }
@@ -141,11 +143,12 @@ final class AppState: ObservableObject {
         else { pinnedLayoutIDs.append(id) }
     }
 
-    /// Pinned layouts that still exist, always including the current target.
+    /// Pinned layouts that still exist, deduped, always including the target.
     var menuLayouts: [LayoutDescriptor] {
         let all = LayoutChooserSheet.allLayouts
-        var ids = pinnedLayoutIDs
-        if !ids.contains(targetLayoutID) { ids.append(targetLayoutID) }
+        var seen = Set<String>()
+        var ids = pinnedLayoutIDs.filter { seen.insert($0).inserted }
+        if seen.insert(targetLayoutID).inserted { ids.append(targetLayoutID) }
         return ids.compactMap { id in all.first { $0.id == id } }
     }
 
@@ -177,23 +180,38 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 215, ideal: 240, max: 300)
         } detail: {
-            VStack(spacing: 0) {
-                HeaderBar()
+            HStack(spacing: 0) {
+                CanvasView()
                 Divider()
-                HStack(spacing: 0) {
-                    CanvasView()
-                    Divider()
-                    InspectorView().frame(width: 300)
-                }
+                InspectorView().frame(width: 300)
             }
         }
+        // The profile header lives in the window's toolbar, so it costs no
+        // vertical space of its own.
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 0) {
+                    Text(app.profile.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    Text("\(app.model.displayName) · Layer \(app.layerIndex + 1) · \(app.currentLayer.name)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(minWidth: 220)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                HeaderActions()
+            }
+        }
+        .navigationTitle("")
         .frame(minWidth: 1040, minHeight: 660)
     }
 }
 
-// MARK: - Header bar
-
-struct HeaderBar: View {
+/// Layout menu, connection state and the write button, all in the title bar.
+struct HeaderActions: View {
     @EnvironmentObject var app: AppState
     @State private var showLayoutChooser = false
 
@@ -203,60 +221,43 @@ struct HeaderBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(app.profile.name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(1)
-                Text("\(app.model.displayName) · Layer \(app.layerIndex + 1) · \(app.currentLayer.name)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+        if case .failed(let msg) = app.writer.phase {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).help(msg)
+        }
+        if case .finished(let n) = app.writer.phase {
+            Label("\(n) written", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 11)).foregroundStyle(SidebarView.green)
+        }
 
-            Spacer(minLength: 10)
-
-            if case .failed(let msg) = app.writer.phase {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange).help(msg)
-            }
-            if case .finished(let n) = app.writer.phase {
-                Label("\(n) written", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 11)).foregroundStyle(SidebarView.green)
-            }
-
-            Menu {
-                ForEach(app.menuLayouts) { d in
-                    Button {
-                        app.targetLayoutID = d.id
-                    } label: {
-                        if d.id == app.targetLayoutID {
-                            Label(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name,
-                                  systemImage: "checkmark")
-                        } else {
-                            Text(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name)
-                        }
+        Menu {
+            ForEach(app.menuLayouts) { d in
+                Button {
+                    app.targetLayoutID = d.id
+                } label: {
+                    if d.id == app.targetLayoutID {
+                        Label(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name,
+                              systemImage: "checkmark")
+                    } else {
+                        Text(d.id == KeyboardLayouts.currentID() ? "\(d.name)  (this Mac)" : d.name)
                     }
                 }
-                Divider()
-                Button("Add Layouts…") { showLayoutChooser = true }
-            } label: {
-                Label(layoutTitle, systemImage: "keyboard")
-                    .font(.system(size: 11))
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Keyboard layout of the Mac the pad will be used on")
-            .sheet(isPresented: $showLayoutChooser) {
-                LayoutChooserSheet().environmentObject(app)
-            }
-
-            ConnectionPill()
-            WriteButton()
+            Divider()
+            Button("Add Layouts…") { showLayoutChooser = true }
+        } label: {
+            Label(layoutTitle, systemImage: "keyboard")
+                .font(.system(size: 11))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(.bar)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Keyboard layout of the Mac the pad will be used on")
+        .sheet(isPresented: $showLayoutChooser) {
+            LayoutChooserSheet().environmentObject(app)
+        }
+
+        ConnectionPill()
+        WriteButton()
     }
 }
 
@@ -264,6 +265,39 @@ struct HeaderBar: View {
 
 struct SidebarView: View {
     @EnvironmentObject var app: AppState
+
+    @State private var renamingProfileID: UUID?
+    @State private var renamingLayer: Int?
+    @State private var draft = ""
+    @FocusState private var nameFocused: Bool
+
+    private func beginProfileRename(_ p: PadProfile) {
+        draft = p.name
+        renamingLayer = nil
+        renamingProfileID = p.id
+        DispatchQueue.main.async { nameFocused = true }
+    }
+
+    private func commitProfileRename(_ id: UUID) {
+        let v = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !v.isEmpty { app.renameProfile(id, to: v) }
+        renamingProfileID = nil
+        nameFocused = false
+    }
+
+    private func beginLayerRename(_ idx: Int, current: String) {
+        draft = current
+        renamingProfileID = nil
+        renamingLayer = idx
+        DispatchQueue.main.async { nameFocused = true }
+    }
+
+    private func commitLayerRename(_ idx: Int) {
+        let v = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !v.isEmpty { app.renameLayer(idx, to: v) }
+        renamingLayer = nil
+        nameFocused = false
+    }
 
     static let layoutOptions: [LayoutDescriptor] = {
         var seen = Set<String>()
@@ -316,15 +350,24 @@ struct SidebarView: View {
                     HStack(spacing: 8) {
                         Image(systemName: p.id == app.profile.id ? "doc.fill" : "doc")
                             .font(.system(size: 11)).foregroundStyle(.secondary)
-                        Text(p.name).font(.system(size: 12)).lineLimit(1)
+                        if renamingProfileID == p.id {
+                            TextField("Name", text: $draft)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12))
+                                .focused($nameFocused)
+                                .onSubmit { commitProfileRename(p.id) }
+                                .onExitCommand { renamingProfileID = nil; nameFocused = false }
+                        } else {
+                            Text(p.name).font(.system(size: 12)).lineLimit(1)
+                        }
                         Spacer()
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { Dialogs.renameProfile(app, p) }
+                    .onTapGesture(count: 2) { beginProfileRename(p) }
                     .onTapGesture { app.loadProfile(p) }
                     .listRowBackground(p.id == app.profile.id ? Color.primary.opacity(0.06) : Color.clear)
                     .contextMenu {
-                        Button("Rename…") { Dialogs.renameProfile(app, p) }
+                        Button("Rename") { beginProfileRename(p) }
                         Button("Duplicate") { app.store.duplicate(p) }
                         Button("Export…") { Exporter.export(p) }
                         Divider()
@@ -351,15 +394,24 @@ struct SidebarView: View {
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .foregroundStyle(app.layerIndex == idx ? .primary : .secondary)
                             .frame(width: 10)
-                        Text(layer.name).font(.system(size: 12)).lineLimit(1)
+                        if renamingLayer == idx {
+                            TextField("Name", text: $draft)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 12))
+                                .focused($nameFocused)
+                                .onSubmit { commitLayerRename(idx) }
+                                .onExitCommand { renamingLayer = nil; nameFocused = false }
+                        } else {
+                            Text(layer.name).font(.system(size: 12)).lineLimit(1)
+                        }
                         Spacer()
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { Dialogs.renameLayer(app, index: idx, current: layer.name) }
+                    .onTapGesture(count: 2) { beginLayerRename(idx, current: layer.name) }
                     .onTapGesture { app.layerIndex = idx }
                     .listRowBackground(app.layerIndex == idx ? Color.primary.opacity(0.06) : Color.clear)
                     .contextMenu {
-                        Button("Rename…") { Dialogs.renameLayer(app, index: idx, current: layer.name) }
+                        Button("Rename") { beginLayerRename(idx, current: layer.name) }
                         Button("Copy Layer") { app.layerIndex = idx; app.copyCurrentLayer() }
                         Button("Paste Layer") { app.layerIndex = idx; Dialogs.pasteLayer(app) }
                             .disabled(!app.canPasteLayer)
@@ -369,7 +421,7 @@ struct SidebarView: View {
                 }
             }
         }
-        .padding(.top, 20)      // clears the traffic lights (window uses a hidden title bar)
+        .padding(.top, 6)
         .listStyle(.sidebar)
     }
 
@@ -510,18 +562,7 @@ struct PadPlateView: View {
                 .shadow(color: .black.opacity(0.35), radius: side * 0.05, y: side * 0.035)
 
             if !action.isEmpty {
-                if action.kind == .keystroke {
-                    Text(action.display.uppercased())
-                        .font(.system(size: side * 0.225, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.93))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.38)
-                        .padding(.horizontal, side * 0.05)
-                } else {
-                    Image(systemName: action.kind == .media ? "speaker.wave.2.fill" : "computermouse.fill")
-                        .font(.system(size: side * 0.30))
-                        .foregroundStyle(.white.opacity(0.8))
-                }
+                keyFaceView(action, side: side)
             }
 
             if selected {
@@ -532,6 +573,29 @@ struct PadPlateView: View {
         }
         .frame(width: side, height: side)
         .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    func keyFaceView(_ action: Action, side: CGFloat) -> some View {
+        let custom = !(action.label ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        if custom || action.kind == .keystroke {
+            Text(action.keyFace.uppercased())
+                .font(.system(size: side * 0.225, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.93))
+                .lineLimit(1)
+                .minimumScaleFactor(0.38)
+                .padding(.horizontal, side * 0.05)
+        } else if action.kind == .media, let mk = MediaKey(rawValue: action.mediaKey) {
+            Image(systemName: mk.symbol)
+                .font(.system(size: side * 0.30))
+                .foregroundStyle(.white.opacity(0.85))
+                .help(mk.title)
+        } else if action.kind == .mouse {
+            Image(systemName: action.isWheel ? "scroll" : "computermouse.fill")
+                .font(.system(size: side * 0.30))
+                .foregroundStyle(.white.opacity(0.85))
+                .help(action.display)
+        }
     }
 
     /// Dim at rest, fills top-to-bottom while writing.
@@ -565,12 +629,29 @@ struct PadPlateView: View {
 
     func knobColumn(_ pad: CGFloat) -> some View {
         let width = pad * 0.165
-        return VStack(spacing: width * 0.16) {
+        return VStack(spacing: width * 0.22) {
             ForEach(0..<app.model.knobCount, id: \.self) { k in
                 let ratio = k < app.model.knobs.count ? app.model.knobs[k].diameterRatio : 1.0
-                knob(index: k, dia: width * ratio, selected: selectedPart(k))
+                VStack(spacing: width * 0.07) {
+                    knob(index: k, dia: width * ratio, selected: selectedPart(k))
+                    let caption = knobCaption(k)
+                    if !caption.isEmpty {
+                        Text(caption)
+                            .font(.system(size: width * 0.115, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .frame(maxWidth: width * 1.15)
+                    }
+                }
             }
         }
+    }
+
+    /// What the knob's press does, printed beside it so the encoder is not a blank.
+    func knobCaption(_ k: Int) -> String {
+        let a = app.action(.knob(k, .press))
+        return a.isEmpty ? "" : a.keyFace.uppercased()
     }
 
     func selectedPart(_ k: Int) -> KnobPart? {

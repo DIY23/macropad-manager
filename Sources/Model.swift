@@ -81,6 +81,15 @@ struct Action: Codable, Hashable {
     var wheelMultiplier: Int = 1
     var wheel: Int = 0                  // legacy: derived from mode when encoding
     var mouseModifiers: Set<Modifier> = []
+    /// Optional user label drawn on the key face, Stream Deck style. When empty
+    /// the key shows the shortcut itself.
+    var label: String? = nil
+
+    /// What the key face should say.
+    var keyFace: String {
+        if let l = label, !l.trimmingCharacters(in: .whitespaces).isEmpty { return l }
+        return display
+    }
 
     static let none = Action(kind: .none)
 
@@ -153,6 +162,23 @@ enum MediaKey: String, Codable, CaseIterable, Identifiable {
         case .brightnessDown: return "Brightness down"
         case .calculator:     return "Calculator"
         case .screenLock:     return "Lock screen"
+        }
+    }
+
+    /// SF Symbol drawn on the key face, distinct per action.
+    var symbol: String {
+        switch self {
+        case .volumeUp:       return "speaker.wave.3.fill"
+        case .volumeDown:     return "speaker.wave.1.fill"
+        case .mute:           return "speaker.slash.fill"
+        case .playPause:      return "playpause.fill"
+        case .nextTrack:      return "forward.fill"
+        case .previousTrack:  return "backward.fill"
+        case .stop:           return "stop.fill"
+        case .brightnessUp:   return "sun.max.fill"
+        case .brightnessDown: return "sun.min.fill"
+        case .calculator:     return "plus.forwardslash.minus"
+        case .screenLock:     return "lock.fill"
         }
     }
 }

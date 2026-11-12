@@ -13,7 +13,6 @@ struct MacroPadManagerApp: App {
                 .frame(minWidth: 1000, minHeight: 640)
         }
         .windowToolbarStyle(.unified(showsTitle: false))
-        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Write All Layers to Pad") {
@@ -26,6 +25,10 @@ struct MacroPadManagerApp: App {
                 Button("Import Profile…") { Importer.importProfile(into: app) }
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                 Button("Export Profile…") { Exporter.export(app.profile) }
+                Divider()
+                Button("Reveal Profiles Folder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([app.store.profilesDir])
+                }
             }
             CommandGroup(after: .pasteboard) {
                 Divider()
