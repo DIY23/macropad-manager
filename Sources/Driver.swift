@@ -197,7 +197,6 @@ struct CH57xK8850Driver: DeviceDriver {
             for b in 0..<model.buttonCount {
                 let c = ControlID.button(b)
                 let a = layer.action(c)
-                guard !a.isEmpty else { continue }
                 out.append(.init(label: "L\(layerIndex + 1) key \(b + 1)",
                                  bytes: Self.pad(try bind(layer: layerIndex, keyID: UInt8(b + 1), action: a, resolver: resolver))))
                 out.append(.init(label: "L\(layerIndex + 1) key \(b + 1) commit", bytes: Self.pad(Self.commit)))
@@ -206,7 +205,6 @@ struct CH57xK8850Driver: DeviceDriver {
                 for part in KnobPart.allCases {
                     let c = ControlID.knob(k, part)
                     let a = layer.action(c)
-                    guard !a.isEmpty else { continue }
                     let keyID = UInt8(17 + 3 * k + Int(part.index))
                     out.append(.init(label: "L\(layerIndex + 1) knob \(k + 1) \(part.rawValue)",
                                      bytes: Self.pad(try bind(layer: layerIndex, keyID: keyID, action: a, resolver: resolver))))
@@ -225,7 +223,10 @@ struct CH57xK8850Driver: DeviceDriver {
 
         switch action.kind {
         case .none:
-            throw DriverError.nothingToWrite
+            // An empty control must still be written: the pad keeps whatever was
+            // in the slot before, so skipping it leaves the old binding alive.
+            // One keyboard entry with usage 0x00 means "no key".
+            msg += [0x01, 0x00, 0x01, 0x00, 0x00, 0x00]
 
         case .keystroke:
             let wantsShift = action.modifiers.contains(.shift) || action.modifiers.contains(.rshift)
